@@ -5,7 +5,7 @@ duplicate them here (and risk the two drifting out of sync), please read the can
 
 > [!IMPORTANT]
 > **All contribution guidelines live in the main framework repository:**
-> **[flixelgdx/flixelgdx -> CONTRIBUTING.md](https://github.com/flixelgdx/flixelgdx/blob/develop/CONTRIBUTING.md)**
+> **[flixelgdx/flixelgdx -> CONTRIBUTING.md](https://github.com/flixelgdx/flixelgdx/blob/master/CONTRIBUTING.md)**
 >
 > That document covers the JDK requirement, coding style, our stance on AI, the branch and pull
 > request workflow, commit conventions, and everything else expected of a contribution. It all

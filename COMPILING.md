@@ -3,7 +3,7 @@
 FlixelGDX Video is a library extension, not a standalone game, so it cannot be run by itself. It
 also is not fully self-contained: every video module depends on the FlixelGDX framework
 (`org.flixelgdx:flixelgdx-core`, `flixelgdx-lwjgl3`, and so on). Testing your changes therefore has
-two parts: getting the extension to build against a framework, and then consuming your local
+two parts: getting the extension to build against the framework, and then consuming your local
 extension from a separate test game.
 
 This guide focuses on what is specific to this repository. For the full environment setup (installing
@@ -62,7 +62,7 @@ exactly as described in the framework's
 ## How this extension depends on the framework
 
 The video modules declare the framework as ordinary external dependencies, pinned to the
-`flixelgdx` version in [`gradle/libs.versions.toml`](gradle/libs.versions.toml) (currently `0.5.1`):
+`flixelgdx` version in [`gradle/libs.versions.toml`](gradle/libs.versions.toml):
 
 ```
 flixelgdx-video-core   -> org.flixelgdx:flixelgdx-core
@@ -162,10 +162,10 @@ every change is picked up on the next build with no republishing.
    with your local projects automatically:
    ```gradle
    // core module
-   implementation 'org.flixelgdx:flixelgdx-video-core:0.5.1'
+   implementation 'org.flixelgdx:flixelgdx-video-core:<flixelgdx-version>'
 
    // lwjgl3 (desktop) module
-   implementation 'org.flixelgdx:flixelgdx-video-lwjgl3:0.5.1'
+   implementation 'org.flixelgdx:flixelgdx-video-lwjgl3:<flixelgdx-version>'
    ```
 4. Install the backend in your launcher and create a video, exactly as shown in the
    [README](README.md#usage).
@@ -270,7 +270,7 @@ Full setup instructions are in the framework's
 
 ### `p7zip` / DMG extraction errors when packaging natives on Linux
 
-- **Fix**: install `p7zip-full` (`sudo apt-get install -y p7zip-full`). It is required to read the
+- **Fix**: install `p7zip-full` (i.e. for Ubuntu, use `sudo apt-get install -y p7zip-full`). It is required to read the
   macOS `.dmg` on non-macOS build machines.
 
 ### Spotless failures

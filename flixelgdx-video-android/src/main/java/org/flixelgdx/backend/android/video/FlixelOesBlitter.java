@@ -32,6 +32,7 @@ import com.badlogic.gdx.graphics.VertexAttribute;
 import com.badlogic.gdx.graphics.VertexAttributes.Usage;
 import com.badlogic.gdx.graphics.glutils.FrameBuffer;
 import com.badlogic.gdx.graphics.glutils.ShaderProgram;
+import com.badlogic.gdx.utils.Disposable;
 
 /**
  * Copies a decoded video frame out of an external OES texture into an ordinary
@@ -51,7 +52,7 @@ import com.badlogic.gdx.graphics.glutils.ShaderProgram;
  * the bottom row of the framebuffer receives the top row of the video, so
  * {@code FlixelVideo} shows the frame upright without a per-platform flip.
  */
-final class FlixelOesBlitter {
+public class FlixelOesBlitter implements Disposable {
 
   private final ShaderProgram shader;
   private final Mesh mesh;
@@ -61,7 +62,7 @@ final class FlixelOesBlitter {
    *
    * @throws IllegalStateException If the shader fails to compile.
    */
-  FlixelOesBlitter() {
+  public FlixelOesBlitter() {
     shader = new ShaderProgram(VERTEX_SHADER, FRAGMENT_SHADER);
     if (!shader.isCompiled()) {
       throw new IllegalStateException("FlixelGDX video OES blit shader failed: " + shader.getLog());
@@ -89,7 +90,7 @@ final class FlixelOesBlitter {
    * @param stMatrix The 4x4 SurfaceTexture transform matrix for this frame.
    * @param target The framebuffer to render the frame into.
    */
-  void blit(int oesTextureId, float[] stMatrix, FrameBuffer target) {
+  public void blit(int oesTextureId, float[] stMatrix, FrameBuffer target) {
     target.begin();
     Gdx.gl.glDisable(GL20.GL_BLEND);
     Gdx.gl.glDisable(GL20.GL_DEPTH_TEST);
@@ -104,7 +105,8 @@ final class FlixelOesBlitter {
   }
 
   /** Releases the shader and quad. Must run on the render thread. */
-  void dispose() {
+  @Override
+  public void dispose() {
     mesh.dispose();
     shader.dispose();
   }

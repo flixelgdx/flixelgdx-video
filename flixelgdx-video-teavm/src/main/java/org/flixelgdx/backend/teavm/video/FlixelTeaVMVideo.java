@@ -56,7 +56,7 @@ import org.teavm.jso.dom.html.HTMLVideoElement;
  * gesture; in that case playback resumes automatically on the next pointer or key
  * event (the rejection handler in {@link #jsPlay} registers one-shot listeners).
  */
-public final class FlixelTeaVMVideo extends FlixelVideo {
+public class FlixelTeaVMVideo extends FlixelVideo {
 
   /** The hidden video element doing the decoding. */
   private final JSObject element;
@@ -448,10 +448,10 @@ public final class FlixelTeaVMVideo extends FlixelVideo {
   @JSBody(script = "return document.createElement('canvas');")
   private static native JSObject jsCreateCanvas();
 
-  @JSBody(params = { "canvas", "v", "w", "h" }, script = ""
-      + "if (canvas.width !== w) canvas.width = w;"
+  @JSBody(params = { "canvas", "v", "w", "h" }, script = """
+      if (canvas.width !== w) canvas.width = w;"
       + "if (canvas.height !== h) canvas.height = h;"
-      + "canvas.getContext('2d').drawImage(v, 0, 0, w, h);")
+      + "canvas.getContext('2d').drawImage(v, 0, 0, w, h);""")
   private static native void jsDrawScaled(JSObject canvas, JSObject v, int w, int h);
 
   /** texImage2D from a canvas source: 3553 = TEXTURE_2D, 6408 = RGBA, 5121 = UNSIGNED_BYTE. */

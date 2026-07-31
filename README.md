@@ -26,10 +26,6 @@ This is a separate repository so games only pull in the decoder they actually sh
 framework itself stays lean. Nothing in the core framework depends on it; the video modules depend
 on the framework, never the other way around.
 
-> [!NOTE]
-> FlixelGDX Video is an independent project and is not officially affiliated with VideoLAN, VLC,
-> or libGDX.
-
 ---
 
 ## Modules

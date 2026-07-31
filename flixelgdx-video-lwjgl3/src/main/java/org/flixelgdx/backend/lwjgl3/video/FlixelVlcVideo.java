@@ -61,7 +61,7 @@ import java.nio.ByteBuffer;
  * inner callbacks run on libvlc decoder threads and only touch the shared frame buffers
  * under {@code bufferLock} plus a handful of volatile flags.
  */
-final class FlixelVlcVideo extends FlixelVideo {
+public class FlixelVlcVideo extends FlixelVideo {
 
   /** Protects the frame buffer swap between the libvlc thread and the render thread. */
   private final Object bufferLock = new Object();
@@ -169,7 +169,7 @@ final class FlixelVlcVideo extends FlixelVideo {
    * @param path Absolute path of the video file to open.
    * @throws IllegalStateException If libvlc cannot open the media.
    */
-  FlixelVlcVideo(@NotNull Pointer instance, @NotNull String path) {
+  public FlixelVlcVideo(@NotNull Pointer instance, @NotNull String path) {
     super();
     Pointer media = LibVlc.libvlc_media_new_path(instance, path);
     if (media == null) {

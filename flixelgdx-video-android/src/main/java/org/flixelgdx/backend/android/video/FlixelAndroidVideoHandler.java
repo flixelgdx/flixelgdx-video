@@ -38,6 +38,7 @@ import org.flixelgdx.video.FlixelVideos;
  *
  * <pre>{@code
  * public class MyAndroidLauncher extends AndroidApplication {
+ *
  *   protected void onCreate(Bundle savedInstanceState) {
  *     super.onCreate(savedInstanceState);
  *     FlixelAndroidVideoHandler.install();

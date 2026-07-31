@@ -1,6 +1,4 @@
 [versions]
-# The FlixelGDX framework release these video backends are built against. The video
-# artifacts depend on the matching org.flixelgdx:flixelgdx-* modules at this version.
 flixelgdx = "0.5.1"
 agp = "8.7.3"
 desugarJdkLibs = "2.1.5"

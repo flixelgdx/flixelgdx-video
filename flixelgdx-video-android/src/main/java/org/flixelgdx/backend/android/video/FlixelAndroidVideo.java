@@ -68,7 +68,7 @@ import java.io.OutputStream;
  * fires its prepared, completion, error, and size callbacks on its own threads, so
  * those only set volatile flags that the render thread reads.
  */
-final class FlixelAndroidVideo extends FlixelVideo {
+public class FlixelAndroidVideo extends FlixelVideo {
 
   /** Serializes MediaPlayer state changes against its callback threads and disposal. */
   private final Object playerLock = new Object();
@@ -128,7 +128,7 @@ final class FlixelAndroidVideo extends FlixelVideo {
    * @param external {@code true} when {@code path} points outside the game's assets.
    * @throws IllegalStateException If the media cannot be opened or the GL objects fail.
    */
-  FlixelAndroidVideo(@NotNull String path, boolean external) {
+  public FlixelAndroidVideo(@NotNull String path, boolean external) {
     super();
     try {
       player = new MediaPlayer();

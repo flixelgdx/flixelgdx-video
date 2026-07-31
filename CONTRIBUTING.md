@@ -12,7 +12,7 @@ duplicate them here (and risk the two drifting out of sync), please read the can
 > applies here unchanged.
 
 The only thing specific to this repository is how you build and test the video extension locally,
-since it depends on the framework rather than standing alone. That is documented separately in
-**[COMPILING.md](COMPILING.md)**.
+since it depends on the framework rather than standing alone. That is documented separately in the
+**[COMPILING.md](COMPILING.md)** document.
 
 For the module layout of this repository, see **[PROJECT.md](PROJECT.md)**.

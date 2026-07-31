@@ -71,5 +71,6 @@ jobs:
           ./gradlew publishAllPublicationsToMavenCentralRepository \
             -PprojectVersion=$VERSION \
             -PpackageVlcNatives=true \
+            -PincludeAndroid=true \
             --no-daemon \
             --warning-mode all

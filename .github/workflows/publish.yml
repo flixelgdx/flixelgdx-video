@@ -58,7 +58,7 @@ jobs:
         # signingInMemoryKey is the ASCII-armored GPG private key (supports newlines safely as an env var).
         # The artifact version is derived from the git tag: v1.2.3 -> 1.2.3.
         # packageVlcNatives=true triggers DownloadVlcNativesTask in the flixelgdx-video-vlc-natives
-        # modules, which downloads and strips all three platform bundles before they are
+        # modules, which downloads and strips every platform/architecture bundle before they are
         # JAR-packaged and published alongside the rest of the video artifacts.
         env:
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
@@ -71,6 +71,5 @@ jobs:
           ./gradlew publishAllPublicationsToMavenCentralRepository \
             -PprojectVersion=$VERSION \
             -PpackageVlcNatives=true \
-            -PincludeAndroid=true \
             --no-daemon \
             --warning-mode all

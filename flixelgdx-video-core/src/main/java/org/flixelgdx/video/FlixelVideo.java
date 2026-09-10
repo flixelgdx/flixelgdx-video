@@ -27,6 +27,7 @@ import org.flixelgdx.Flixel;
 import org.flixelgdx.FlixelBasic;
 import org.flixelgdx.FlixelCamera;
 import org.flixelgdx.graphics.FlixelBatch;
+import org.flixelgdx.graphics.FlixelGraphicsManager;
 import org.flixelgdx.graphics.FlixelImage;
 import org.flixelgdx.graphics.FlixelTexture;
 import org.flixelgdx.util.signal.FlixelSignal;
@@ -468,13 +469,34 @@ public abstract class FlixelVideo extends FlixelBasic {
   }
 
   /**
+   * Creates the GPU texture used to hold decoded video frames.
+   *
+   * <p>The default creates a blank, updateable texture via
+   * {@link FlixelGraphicsManager#createTexture(int, int)} and marks it for smooth (linear)
+   * filtering. Backends that need a specialized texture type (for example, an HTML5 backend
+   * that uploads frames through a DOM element source rather than a Java pixel copy) can override
+   * this to return their own implementation.
+   *
+   * @param width Texture width in pixels.
+   * @param height Texture height in pixels.
+   * @return A new, updateable frame texture; never {@code null}.
+   */
+  @NotNull
+  protected FlixelTexture createFrameTexture(int width, int height) {
+    FlixelTexture tex = Flixel.graphics.createTexture(width, height);
+    tex.setSmooth(true);
+    return tex;
+  }
+
+  /**
    * Uploads the newest decoded frame into the reusable frame texture.
    *
    * <p>Backends call this from {@link #updateMedia(float)} on the render thread whenever a fresh
    * frame is ready. The first call, and any call whose pixel size differs from the current texture,
-   * creates the texture; every other call scrubs the existing texture's pixels in place. This is the
-   * "reuse one texture, rewrite its pixels" path, kept here so every backend shares it: a backend
-   * only has to decode RGBA into a {@link FlixelImage}, never manage a GPU texture itself.
+   * creates a new dynamic texture via {@link #createFrameTexture(int, int)}; every other call
+   * scrubs the existing texture's pixels in place. This is the "reuse one texture, rewrite its
+   * pixels" path, kept here so every backend shares it: a backend only has to decode RGBA into a
+   * {@link FlixelImage} (or set up a direct pixel source), never manage a GPU texture itself.
    *
    * @param image The freshly decoded RGBA pixels; owned by the backend and reused between frames.
    */
@@ -489,12 +511,10 @@ public abstract class FlixelVideo extends FlixelBasic {
       if (current != null) {
         current.destroy();
       }
-      current = Flixel.graphics.createTexture(image);
-      current.setSmooth(true);
+      current = createFrameTexture(w, h);
       texture = current;
-    } else {
-      current.update(0, 0, image);
     }
+    current.update(0, 0, image);
     frameReady = true;
   }
 

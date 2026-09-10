@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Website](https://img.shields.io/badge/website-flixelgdx.org-blue)](https://flixelgdx.org)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-orange)](https://adoptium.net/temurin/releases?version=17&os=any&arch=any)
-[![Platforms](https://img.shields.io/badge/platforms-Desktop%20%7C%20Android%20%7C%20Web-brightgreen)](https://flixelgdx.org)
+[![Platforms](https://img.shields.io/badge/platforms-Desktop%20%7C%20Web-brightgreen)](https://flixelgdx.org)
 
 </div>
 
@@ -35,11 +35,10 @@ only carries the code and natives for the platforms you target.
 
 | Module | Purpose |
 |--------|---------|
-| **`flixelgdx-video-core`** | The platform-neutral API (`FlixelVideo`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`). Depends only on `flixelgdx-core`. |
-| **`flixelgdx-video-lwjgl3`** | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA. |
-| **`flixelgdx-video-teavm`** | Web backend built on a hidden HTML video element the browser decodes, uploaded to the GPU each frame. |
-| **`flixelgdx-video-android`** | Android backend that decodes with the platform `MediaPlayer` into a `SurfaceTexture`, then blits each frame into a normal texture so it draws through the regular batch. |
-| **`flixelgdx-video-vlc-natives-*`** | Packaging-only modules that bundle the stripped libvlc natives for Windows, Linux, and macOS. Pulled in automatically by the desktop backend. |
+| **`flixelgdx-video-core`** | The platform-neutral API (`FlixelVideo`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`). Holds the shared "reuse one texture, rewrite its pixels" upload path, so every backend only has to decode a frame into a `FlixelImage`. Depends only on `flixelgdx-core`. |
+| **`flixelgdx-video-desktop`** | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA. |
+| **`flixelgdx-video-html5`** | Web backend built on a hidden HTML video element the browser decodes; each frame is read back and handed to core. |
+| **`flixelgdx-video-vlc-natives-*`** | Packaging-only modules that bundle the stripped libvlc natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Pulled in automatically by the desktop backend. |
 
 ---
 
@@ -57,27 +56,19 @@ dependencies {
 }
 ```
 
-**Desktop (`lwjgl3`) launcher module:**
+**Desktop launcher module:**
 
 ```gradle
 dependencies {
-  implementation "org.flixelgdx:flixelgdx-video-lwjgl3:<flixelgdx-version>"
+  implementation "org.flixelgdx:flixelgdx-video-desktop:<flixelgdx-version>"
 }
 ```
 
-**Web (`teavm`) launcher module:**
+**Web launcher module:**
 
 ```gradle
 dependencies {
-  implementation "org.flixelgdx:flixelgdx-video-teavm:<flixelgdx-version>"
-}
-```
-
-**Android launcher module:**
-
-```gradle
-dependencies {
-  implementation "org.flixelgdx:flixelgdx-video-android:<flixelgdx-version>"
+  implementation "org.flixelgdx:flixelgdx-video-html5:<flixelgdx-version>"
 }
 ```
 
@@ -100,7 +91,7 @@ platform-specific code you write.
 ```java
 public static void main(String[] args) {
   FlixelVlcVideoHandler.install();
-  FlixelLwjgl3Launcher.launch(new MyGame());
+  FlixelDesktopLauncher.launch(new MyGame());
 }
 ```
 
@@ -108,31 +99,22 @@ public static void main(String[] args) {
 
 ```java
 public static void main(String[] args) {
-  FlixelTeaVMVideoHandler.install();
-  FlixelTeaVMLauncher.launch(new MyGame());
-}
-```
-
-**Android:**
-
-```java
-protected void onCreate(Bundle savedInstanceState) {
-  super.onCreate(savedInstanceState);
-  FlixelAndroidVideoHandler.install();
-  FlixelAndroidLauncher.launch(new MyGame(), this);
+  FlixelHtml5VideoHandler.install();
+  FlixelHtml5Launcher.launch(new MyGame());
 }
 ```
 
 ### 2. Create and play a video
 
-From then on, your game code is fully cross-platform. `FlixelVideos.create(...)` uses whichever
-backend the launcher installed:
+From then on, your game code is fully cross-platform. `FlixelVideos.create(...)` takes a
+`FlixelFile` from `Flixel.files` (the same file seam the rest of the framework loads assets
+through) and uses whichever backend the launcher installed:
 
 ```java
-FlixelVideo cutscene = FlixelVideos.create("videos/intro.mp4");
+FlixelVideo cutscene = FlixelVideos.create(Flixel.files.internal("videos/intro.mp4"));
 cutscene.setSize(Flixel.game.getWidth(), Flixel.game.getHeight());
 cutscene.setLooped(false);
-cutscene.onComplete.add(() -> Flixel.switchState(new MenuState()));
+cutscene.onComplete.add(data -> Flixel.switchState(MenuState::new));
 add(cutscene);
 cutscene.play();
 ```
@@ -146,8 +128,10 @@ leaves the game for good to release the decoder and its frame texture.
 ## About the desktop natives
 
 The desktop backend needs libvlc at runtime. Released artifacts bundle a stripped set of libvlc
-natives for Windows, Linux, and macOS, so most games work out of the box with no VLC installation
-required. If the bundled natives are missing (for example, a JitPack build) or fail to load,
+natives for Windows and Linux (both x86-64 and ARM64) and macOS (universal), so most games work out
+of the box with no VLC installation required. `FlixelVlcDiscovery` picks the folder matching the
+current OS and CPU architecture. If the bundled natives are missing (for example, a JitPack build)
+or fail to load,
 `FlixelVlcDiscovery` falls back to a game-shipped `vlc/` folder or a system VLC install. If none of
 those work, videos degrade gracefully to a never-ready state and the reason is logged, instead of
 crashing the game.

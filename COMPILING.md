@@ -2,14 +2,14 @@
 
 FlixelGDX Video is a library extension, not a standalone game, so it cannot be run by itself. It
 also is not fully self-contained: every video module depends on the FlixelGDX framework
-(`org.flixelgdx:flixelgdx-core`, `flixelgdx-lwjgl3`, and so on). Testing your changes therefore has
+(`org.flixelgdx:flixelgdx-core`, `flixelgdx-desktop`, and so on). Testing your changes therefore has
 two parts: getting the extension to build against the framework, and then consuming your local
 extension from a separate test game.
 
 This guide focuses on what is specific to this repository. For the full environment setup (installing
-JDK 17 with Eclipse Temurin, Git, the Android SDK, IDE configuration, and platform troubleshooting),
-follow the framework's guide, which applies here unchanged:
-**[flixelgdx/flixelgdx -> COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/develop/COMPILING.md)**.
+JDK 17 with Eclipse Temurin, Git, IDE configuration, and platform troubleshooting), follow the
+framework's guide, which applies here unchanged:
+**[flixelgdx/flixelgdx -> COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/master/COMPILING.md)**.
 
 ---
 
@@ -22,20 +22,18 @@ follow the framework's guide, which applies here unchanged:
 5. [Per-platform build checks](#per-platform-build-checks)
 6. [Testing the extension in a game (composite build)](#testing-the-extension-in-a-game-composite-build)
 7. [Packaging the libvlc natives locally](#packaging-the-libvlc-natives-locally)
-8. [The Android module](#the-android-module)
-9. [Troubleshooting](#troubleshooting)
+8. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Prerequisites
 
-- **Java (JDK 17, Eclipse Temurin).** The build uses the Gradle wrapper (Gradle 9.x) and a Java 17
-  toolchain. Install Temurin 17 as described in the framework's
-  [COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/develop/COMPILING.md).
+- **Java (JDK 17, Eclipse Temurin).** The build uses the Gradle wrapper and a Java 17 toolchain.
+  Install Temurin 17 as described in the framework's
+  [COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/master/COMPILING.md).
 - **Git**, to clone this repository and the framework.
 - **(Desktop packaging only)** `p7zip` on Linux, needed to extract the macOS VLC DMG when packaging
   natives. See [Packaging the libvlc natives locally](#packaging-the-libvlc-natives-locally).
-- **(Android only)** The Android SDK. See [The Android module](#the-android-module).
 
 Verify Java after installing:
 
@@ -54,8 +52,7 @@ cd flixelgdx-video
 
 If you are contributing, fork the repository first, clone your fork, and add the upstream remote,
 exactly as described in the framework's
-[CONTRIBUTING.md](https://github.com/flixelgdx/flixelgdx/blob/develop/CONTRIBUTING.md). Use the
-`develop` branch for development and pull requests.
+[CONTRIBUTING.md](https://github.com/flixelgdx/flixelgdx/blob/master/CONTRIBUTING.md).
 
 ---
 
@@ -65,48 +62,46 @@ The video modules declare the framework as ordinary external dependencies, pinne
 `flixelgdx` version in [`gradle/libs.versions.toml`](gradle/libs.versions.toml):
 
 ```
-flixelgdx-video-core   -> org.flixelgdx:flixelgdx-core
-flixelgdx-video-lwjgl3 -> org.flixelgdx:flixelgdx-lwjgl3 (+ flixelgdx-video-core)
-flixelgdx-video-teavm  -> org.flixelgdx:flixelgdx-teavm  (+ flixelgdx-video-core)
-flixelgdx-video-android-> org.flixelgdx:flixelgdx-android (+ flixelgdx-video-core)
+flixelgdx-video-core    -> org.flixelgdx:flixelgdx-core
+flixelgdx-video-desktop -> org.flixelgdx:flixelgdx-desktop (+ flixelgdx-video-core)
+flixelgdx-video-html5   -> org.flixelgdx:flixelgdx-html5   (+ flixelgdx-video-core)
 ```
 
-For the build to resolve those, the matching framework version must be available from one of the
-repositories configured in [`settings.gradle.kts`](settings.gradle.kts):
+There are two ways for the build to resolve them.
+
+### Composite build against a sibling framework clone (recommended)
+
+`settings.gradle.kts` automatically includes a sibling framework checkout as a
+[Gradle composite build](https://docs.gradle.org/current/userguide/composite_builds.html) when one
+exists at `../flixelgdx`, right next to this repository:
+
+```
+some-folder/
+  flixelgdx/         <- the framework
+  flixelgdx-video/   <- this repository
+```
+
+With that layout, `./gradlew assemble` compiles the video modules directly against the framework
+source, and any framework change is picked up on the next build with no republishing. This is the
+path used while the framework and the extension move together. Gradle substitutes the framework
+artifacts by module coordinates, so the `flixelgdx` version number in the catalog does not need to
+match while the composite build is active.
+
+### Published or locally installed framework
+
+When `../flixelgdx` is absent (for example on CI), the framework is resolved from one of the
+repositories configured in [`settings.gradle.kts`](settings.gradle.kts) instead:
 
 - **Maven Central** - the normal case once a framework release is published.
 - **Your local Maven repository** (`mavenLocal()`) - after you run `publishToMavenLocal` in a
-  framework clone. This is the recommended path when you are changing the framework and the
-  extension together.
+  framework clone whose `projectVersion` matches the `flixelgdx` version in the catalog.
 - **JitPack** - a framework build from a GitHub branch or commit.
-
-> [!TIP]
-> If you are only changing the video extension (not the framework) and a matching framework release
-> is already on Maven Central, you do not have to do anything special. `./gradlew assemble` just
-> works.
-
-### Developing against a local framework clone
-
-When your extension change needs a framework change that is not published yet, publish the framework
-to your local Maven repository, then build the extension against it:
-
-```bash
-# In your framework clone:
-./gradlew publishToMavenLocal
-
-# Then, back in flixelgdx-video:
-./gradlew assemble
-```
-
-Make sure the `flixelgdx` version in `gradle/libs.versions.toml` matches the `projectVersion` of the
-framework you published. Re-run `publishToMavenLocal` whenever you change framework code you want the
-extension to pick up.
 
 ---
 
 ## Building the extension
 
-Build every default module (everything except the optional Android module):
+Build every module:
 
 ```bash
 ./gradlew assemble
@@ -133,9 +128,8 @@ CI compiles each platform backend on its own. You can reproduce any of them loca
 
 | Platform | Command |
 |----------|---------|
-| **Desktop (LWJGL3)** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-lwjgl3:assemble` |
-| **Web (TeaVM)** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-teavm:assemble` |
-| **Android** | `./gradlew -PincludeAndroid=true :flixelgdx-video-core:assemble :flixelgdx-video-android:assembleRelease` |
+| **Desktop** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-desktop:assemble` |
+| **Web** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-html5:assemble` |
 
 ---
 
@@ -164,12 +158,12 @@ every change is picked up on the next build with no republishing.
    // core module
    implementation 'org.flixelgdx:flixelgdx-video-core:<flixelgdx-version>'
 
-   // lwjgl3 (desktop) module
-   implementation 'org.flixelgdx:flixelgdx-video-lwjgl3:<flixelgdx-version>'
+   // desktop module
+   implementation 'org.flixelgdx:flixelgdx-video-desktop:<flixelgdx-version>'
    ```
 4. Install the backend in your launcher and create a video, exactly as shown in the
    [README](README.md#usage).
-5. Refresh Gradle and run the game (for example `./gradlew :lwjgl3:run`).
+5. Refresh Gradle and run the game (for example `./gradlew :desktop:run`).
 
 > [!NOTE]
 > The version string in the dependency does not have to match while a composite build is active;
@@ -177,10 +171,11 @@ every change is picked up on the next build with no republishing.
 > regardless of the number you write.
 
 > [!TIP]
-> If you are also changing the framework at the same time, publish the framework to your local Maven
-> repository (`publishToMavenLocal`) so the composited extension can resolve it. Keeping the framework
-> on `mavenLocal()` avoids nested composite build edge cases (both this repo and the framework ship a
-> build named `build-logic`).
+> If you are also changing the framework, keep it checked out at `../flixelgdx` next to this
+> repository so the extension composites it automatically (see
+> [above](#composite-build-against-a-sibling-framework-clone-recommended)). If your Gradle setup
+> trips over the two nested `build-logic` builds, publish the framework to your local Maven
+> repository (`publishToMavenLocal`) and remove the `../flixelgdx` clone instead.
 
 ### Method 2: `mavenLocal()`
 
@@ -208,16 +203,18 @@ By default the desktop backend JAR is built **without** bundled natives, so a no
 # On Linux, install p7zip first so the macOS DMG can be extracted:
 sudo apt-get install -y p7zip-full
 
-./gradlew :flixelgdx-video-vlc-natives-linux-amd64:build \
-          :flixelgdx-video-vlc-natives-windows-amd64:build \
+./gradlew :flixelgdx-video-vlc-natives-windows-amd64:build \
+          :flixelgdx-video-vlc-natives-windows-aarch64:build \
+          :flixelgdx-video-vlc-natives-linux-amd64:build \
+          :flixelgdx-video-vlc-natives-linux-aarch64:build \
           :flixelgdx-video-vlc-natives-macos-universal:build \
           -PpackageVlcNatives=true
 ```
 
 `DownloadVlcNativesTask` (in [`build-logic`](build-logic/src/main/kotlin/DownloadVlcNativesTask.kt))
 downloads the official VLC bundles, verifies their checksums, strips the plugin categories a game
-does not need, and packages the result under `org/flixelgdx/video/natives`. The download is cached
-between builds and the extraction is skipped if the expected files already exist.
+does not need, and packages the result under `org/flixelgdx/video/natives/<os>-<arch>`. The download
+is cached between builds and the extraction is skipped if the expected files already exist.
 
 You usually do not need bundled natives to test locally: if none are on the classpath,
 `FlixelVlcDiscovery` falls back to a game-shipped `vlc/` folder or a system VLC installation, so
@@ -225,40 +222,17 @@ installing VLC on your machine is enough to see desktop video play.
 
 ---
 
-## The Android module
-
-The Android backend is optional so the extension can be built without an Android SDK. It is excluded
-from the build by default. Enable it the same way the framework does:
-
-- **CI or one-off builds**: pass the property on the command line:
-  ```bash
-  ./gradlew -PincludeAndroid=true :flixelgdx-video-android:assembleRelease
-  ```
-- **Local development**: add `includeAndroid=true` to `local.properties` (gitignored). See
-  [`example.local.properties`](example.local.properties).
-
-Building the Android module requires the Android SDK and an `sdk.dir` entry in `local.properties`.
-Full setup instructions are in the framework's
-[COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/develop/COMPILING.md#setting-up-the-android-sdk-for-contributing-to-the-android-platform).
-
-> [!NOTE]
-> Because `flixelgdx-video-android` depends on `org.flixelgdx:flixelgdx-android`, that framework
-> module must be resolvable too (from Maven Central or a local `publishToMavenLocal` build with
-> `-PincludeAndroid=true`).
-
----
-
 ## Troubleshooting
 
-### `Could not find org.flixelgdx:flixelgdx-core` (or `-jvm`, `-lwjgl3`, `-teavm`, `-android`)
+### `Could not find org.flixelgdx:flixelgdx-core` (or `-jvm`, `-desktop`, `-html5`)
 
 - **Cause**: the framework version this extension targets is not available in any configured
-  repository.
-- **Fix**: either publish that framework version to your local Maven repository
-  (`./gradlew publishToMavenLocal` in a framework clone whose `projectVersion` matches the
-  `flixelgdx` version in `gradle/libs.versions.toml`), or use a composite/JitPack path. Remember that
-  transitive framework modules (such as `flixelgdx-jvm`) must be published too, so publishing the
-  whole framework is the safest option.
+  repository, and no `../flixelgdx` composite clone is present.
+- **Fix**: clone the framework next to this repository (`../flixelgdx`) so the composite build picks
+  it up, or publish that framework version to your local Maven repository (`./gradlew
+  publishToMavenLocal` in a framework clone whose `projectVersion` matches the `flixelgdx` version in
+  `gradle/libs.versions.toml`). Remember that transitive framework modules (such as `flixelgdx-jvm`)
+  must be resolvable too, so publishing the whole framework is the safest option.
 
 ### Desktop video never becomes ready
 
@@ -270,13 +244,13 @@ Full setup instructions are in the framework's
 
 ### `p7zip` / DMG extraction errors when packaging natives on Linux
 
-- **Fix**: install `p7zip-full` (i.e. for Ubuntu, use `sudo apt-get install -y p7zip-full`). It is required to read the
-  macOS `.dmg` on non-macOS build machines.
+- **Fix**: install `p7zip-full` (for Ubuntu, `sudo apt-get install -y p7zip-full`). It is required to
+  read the macOS `.dmg` on non-macOS build machines.
 
 ### Spotless failures
 
 - **Fix**: run `./gradlew spotlessApply` and commit the reformatted files.
 
 For anything not covered here, the framework's
-[COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/develop/COMPILING.md#troubleshooting)
+[COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/master/COMPILING.md#troubleshooting)
 troubleshooting section applies to this repository as well.

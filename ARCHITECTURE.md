@@ -12,23 +12,24 @@ extension. That one-directional relationship is why the extension can live in it
 
 - **`flixelgdx-video-core`**: The heart of the extension. It holds the platform-neutral API
   (`FlixelVideo`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`, and the
-  `FlixelUnavailableVideo` fallback). Depends only on `flixelgdx-core`. Every other module depends
+  `FlixelUnavailableVideo` fallback). It also owns the shared frame path: a backend decodes each
+  frame into a `FlixelImage` and hands it to `FlixelVideo.updateFrame(...)`, which keeps one
+  `FlixelTexture` alive and scrubs its pixels. Because that upload rides on the portable graphics
+  interface, every backend reuses it. Depends only on `flixelgdx-core`; every other module depends
   on this one.
-- **`flixelgdx-video-lwjgl3`**: The desktop backend powered by
+- **`flixelgdx-video-desktop`**: The desktop backend powered by
   [libvlc](https://www.videolan.org/vlc/libvlc.html). It bridges libvlc into the framework through
-  JNA-registered JNI bindings and loads the native libraries provided by the
-  `flixelgdx-video-vlc-natives-*` modules.
-- **`flixelgdx-video-teavm`**: The web backend built on a hidden HTML video element, which the
-  browser decodes; each frame is transferred GPU-to-GPU with `texImage2D`.
-- **`flixelgdx-video-android`**: The Android backend that decodes with the platform `MediaPlayer`
-  into a `SurfaceTexture` bound to a `GL_TEXTURE_EXTERNAL_OES` texture, then blits each frame into a
-  normal framebuffer texture so videos draw through the regular batch and follow state draw order
-  (added first draws under, added last draws over). Optional, and only included when the Android SDK
-  is present (see [COMPILING.md](COMPILING.md)).
-- **`flixelgdx-video-vlc-natives-windows-amd64`**, **`-linux-amd64`**, **`-macos-universal`**:
-  Packaging-only modules. They carry no Java source; when the `packageVlcNatives` property is set,
-  each one downloads, strips, and bundles the libvlc natives for its platform into a JAR. The
-  desktop backend pulls them in as runtime dependencies.
+  JNA-registered JNI bindings, decodes frames into memory through libvlc's video callbacks, and
+  loads the native libraries provided by the `flixelgdx-video-vlc-natives-*` modules.
+- **`flixelgdx-video-html5`**: The web backend built on a hidden HTML video element, which the
+  browser decodes; each frame is drawn onto an offscreen canvas, read back as RGBA, and handed to
+  core.
+- **`flixelgdx-video-vlc-natives-windows-amd64`**, **`-windows-aarch64`**, **`-linux-amd64`**,
+  **`-linux-aarch64`**, **`-macos-universal`**: Packaging-only modules. They carry no Java source;
+  when the `packageVlcNatives` property is set, each one downloads, strips, and bundles the libvlc
+  natives for its platform and architecture into a JAR. The desktop backend pulls them in as runtime
+  dependencies, and `FlixelVlcDiscovery` loads the folder matching the current OS and CPU
+  architecture.
 
 ## Build System
 
@@ -39,7 +40,8 @@ FlixelGDX Video uses **Gradle** with the modern Kotlin DSL, mirroring the framew
 - **`build.gradle.kts`**: The root aggregator. It applies IDE plugins and registers the aggregate
   `javadocAll` task; it holds no source of its own.
 - **`settings.gradle.kts`**: Defines the modules included in the build, the repositories used to
-  resolve the FlixelGDX framework, and the optional Android module.
+  resolve the FlixelGDX framework, and the composite build against a sibling `../flixelgdx` checkout
+  when one is present.
 - **`gradle.properties`**: Contains the project version, group ID, and the POM metadata used when
   publishing.
 - **`gradle/libs.versions.toml`**: The version catalog. The `flixelgdx` version pins which framework
@@ -50,10 +52,10 @@ FlixelGDX Video uses **Gradle** with the modern Kotlin DSL, mirroring the framew
 ### Dependency Management
 
 The video backends depend on the framework as external artifacts
-(`org.flixelgdx:flixelgdx-core:<version>`, `flixelgdx-lwjgl3`, and so on), resolved from Maven
-Central, a local `publishToMavenLocal` build, JitPack, or a Gradle composite build. See
-[COMPILING.md](COMPILING.md) for how to point the build at a local framework clone during
-development.
+(`org.flixelgdx:flixelgdx-core:<version>`, `flixelgdx-desktop`, `flixelgdx-html5`), resolved from
+Maven Central, a local `publishToMavenLocal` build, or JitPack. During development the build also
+includes a sibling `../flixelgdx` checkout as a Gradle composite build when it is present, so
+framework changes are picked up from source without republishing. See [COMPILING.md](COMPILING.md).
 
 ## GitHub Integration
 

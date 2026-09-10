@@ -378,13 +378,10 @@ public class FlixelHtml5Video extends FlixelVideo {
       + "v.playsInline = true;"
       + "v.flixelVolume = 1;"
       + "v.flixelLoop = false;"
-      + "v.flxFrameDirty = false;"
+      + "v.flxLastTime = -1.0;"
       + "v.addEventListener('loadedmetadata', function() {"
       + "  v.volume = v.flixelVolume;"
       + "  v.loop = v.flixelLoop;"
-      + "});"
-      + "v.addEventListener('timeupdate', function() {"
-      + "  v.flxFrameDirty = true;"
       + "});"
       + "v.load();"
       + "return v;")
@@ -443,8 +440,16 @@ public class FlixelHtml5Video extends FlixelVideo {
   @JSBody(params = { "v" }, script = "return v.readyState;")
   private static native int jsGetReadyState(JSObject v);
 
-  /** Reads and clears the frame-dirty flag set by the {@code timeupdate} listener. */
-  @JSBody(params = { "v" }, script = "var d = v.flxFrameDirty; v.flxFrameDirty = false; return d;")
+  /**
+   * Returns whether the decoder has advanced to a new frame since the last call.
+   *
+   * <p>{@code currentTime} advances exactly once per decoded frame, giving per-frame
+   * resolution without any event listener. The {@code timeupdate} event fires at most
+   * four times per second per spec, which is too coarse for smooth video playback.
+   */
+  @JSBody(params = { "v" }, script = "var t = v.currentTime;"
+      + "if (t !== v.flxLastTime) { v.flxLastTime = t; return true; }"
+      + "return false;")
   private static native boolean jsConsumeFrameDirty(JSObject v);
 
   @JSBody(params = { "v" }, script = "return v.videoWidth;")

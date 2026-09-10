@@ -1,27 +1,22 @@
 [versions]
-flixelgdx = "0.5.1"
-agp = "8.7.3"
-desugarJdkLibs = "2.1.5"
-gdx = "1.14.0"
+flixelgdx = "0.6.0"
 graalvm = "24.2.0"
 jetbrainsAnnotations = "26.1.0"
 jna = "5.17.0"
 spotless = "8.6.0"
+teavm = "0.15.0"
 vanniktech = "0.33.0"
 vlc = "3.0.23"
 
 [libraries]
 flixelgdx-core = { module = "org.flixelgdx:flixelgdx-core", version.ref = "flixelgdx" }
-flixelgdx-lwjgl3 = { module = "org.flixelgdx:flixelgdx-lwjgl3", version.ref = "flixelgdx" }
-flixelgdx-teavm = { module = "org.flixelgdx:flixelgdx-teavm", version.ref = "flixelgdx" }
-flixelgdx-android = { module = "org.flixelgdx:flixelgdx-android", version.ref = "flixelgdx" }
-desugar-jdk-libs = { module = "com.android.tools:desugar_jdk_libs", version.ref = "desugarJdkLibs" }
-gdx-backend-lwjgl3 = { module = "com.badlogicgames.gdx:gdx-backend-lwjgl3", version.ref = "gdx" }
+flixelgdx-desktop = { module = "org.flixelgdx:flixelgdx-desktop", version.ref = "flixelgdx" }
+flixelgdx-html5 = { module = "org.flixelgdx:flixelgdx-html5", version.ref = "flixelgdx" }
 graalvm-nativeimage = { module = "org.graalvm.sdk:nativeimage", version.ref = "graalvm" }
 jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrainsAnnotations" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 [plugins]
-android-library = { id = "com.android.library", version.ref = "agp" }
 spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+teavm = { id = "org.teavm", version.ref = "teavm" }
 vanniktech = { id = "com.vanniktech.maven.publish", version.ref = "vanniktech" }

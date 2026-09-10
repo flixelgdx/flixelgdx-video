@@ -14,7 +14,6 @@ plugins {
   // root project itself; subprojects apply them via the flixelgdx.* convention plugins.
   alias(libs.plugins.spotless) apply false
   alias(libs.plugins.vanniktech) apply false
-  alias(libs.plugins.android.library) apply false
 }
 
 val groupId: String by project
@@ -37,7 +36,7 @@ tasks.register("javadocAll") {
   description = "Runs Javadoc (with doclint) on all published Java library modules."
   dependsOn(
     ":flixelgdx-video-core:javadoc",
-    ":flixelgdx-video-lwjgl3:javadoc",
-    ":flixelgdx-video-teavm:javadoc"
+    ":flixelgdx-video-desktop:javadoc",
+    ":flixelgdx-video-html5:javadoc"
   )
 }

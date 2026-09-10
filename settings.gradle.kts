@@ -1,19 +1,16 @@
-import java.util.Properties
-
 /**
  * Root settings for the FlixelGDX Video multi-module build.
  *
  * <p>Declares the build-logic included build so convention plugins are available to all
- * subprojects, centralizes repository declarations (including where the FlixelGDX framework
- * artifacts are resolved from), and conditionally includes the Android module when the Android
- * SDK is present.
+ * subprojects, includes the sibling FlixelGDX framework as a composite build so the video modules
+ * can resolve it from source during development, and centralizes repository declarations (including
+ * where published FlixelGDX framework artifacts are resolved from).
  */
 
 pluginManagement {
   includeBuild("build-logic")
   repositories {
     gradlePluginPortal()
-    google()
     mavenCentral()
     maven("https://s01.oss.sonatype.org")
     maven("https://oss.sonatype.org/content/repositories/snapshots/")
@@ -25,33 +22,13 @@ plugins {
   id("org.gradle.toolchains.foojay-resolver-convention") version "0.9.0"
 }
 
-// The Android module is optional so the extension can be built without an Android SDK.
-// Enable via: -PincludeAndroid=true (CI / one-off) or includeAndroid=true in local.properties (gitignored).
-val includeAndroidFromCli = startParameter.projectProperties["includeAndroid"] == "true"
-val includeAndroidFromLocal = run {
-  val f = File(settingsDir, "local.properties")
-  if (f.exists()) {
-    val props = Properties()
-    f.inputStream().use(props::load)
-    props.getProperty("includeAndroid", "false") == "true"
-  } else {
-    false
-  }
-}
-val includeAndroid = includeAndroidFromCli || includeAndroidFromLocal
-gradle.extra["includeAndroid"] = includeAndroid
-
 dependencyResolutionManagement {
   repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
   repositories {
     mavenCentral()
     gradlePluginPortal()
-    google()
-    maven("https://s01.oss.sonatype.org")
-    // mavenLocal() and jitpack.io let the video modules resolve the FlixelGDX framework
-    // from a local publishToMavenLocal build or a GitHub branch/commit when a matching
-    // release is not yet on Maven Central. See COMPILING.md for the composite build path.
     mavenLocal()
+    maven("https://s01.oss.sonatype.org")
     maven("https://oss.sonatype.org/content/repositories/snapshots/")
     maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
     maven("https://jitpack.io")
@@ -60,15 +37,20 @@ dependencyResolutionManagement {
 
 rootProject.name = "flixelgdx-video"
 
+// Build against the sibling FlixelGDX framework checkout when it is present, so a local framework
+// change is picked up without republishing. When ../flixelgdx is absent (for example on CI) the
+// framework is resolved from the repositories above instead.
+if (file("../flixelgdx").isDirectory) {
+  includeBuild("../flixelgdx")
+}
+
 include(
   "flixelgdx-video-core",
+  "flixelgdx-video-desktop",
+  "flixelgdx-video-html5",
   "flixelgdx-video-vlc-natives-windows-amd64",
+  "flixelgdx-video-vlc-natives-windows-aarch64",
   "flixelgdx-video-vlc-natives-linux-amd64",
-  "flixelgdx-video-vlc-natives-macos-universal",
-  "flixelgdx-video-lwjgl3",
-  "flixelgdx-video-teavm"
+  "flixelgdx-video-vlc-natives-linux-aarch64",
+  "flixelgdx-video-vlc-natives-macos-universal"
 )
-
-if (includeAndroid) {
-  include("flixelgdx-video-android")
-}

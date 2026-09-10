@@ -58,6 +58,14 @@ abstract class DownloadVlcNativesTask @Inject constructor(
   @get:OutputDirectory
   abstract val nativesDir: DirectoryProperty
 
+  /**
+   * Name of the per-platform subdirectory the extracted libraries are written into, for example
+   * {@code "windows-amd64"} or {@code "linux-aarch64"}. This must match the directory
+   * FlixelVlcDiscovery looks the natives up under at runtime.
+   */
+  @get:Input
+  abstract val platformDir: Property<String>
+
   @TaskAction
   fun execute() {
     val version = vlcVersion.get()
@@ -104,9 +112,9 @@ abstract class DownloadVlcNativesTask @Inject constructor(
   }
 
   private fun extractDeb(deb: File, destDir: File) {
-    // Use system ar/tar instead of commons-compress to avoid classloader version conflicts
-    // with the Android Gradle Plugin, which pulls commons-compress 1.21 into a shared
-    // parent classloader that overrides build-logic's 1.27.x at runtime.
+    // Use system ar/tar to unpack the .deb rather than commons-compress: it sidesteps any
+    // classloader version mismatch of commons-compress on the build-logic classpath and relies
+    // only on tools already present on the Linux build machines that package the natives.
     destDir.mkdirs()
     val arStage = createTempDir("deb-ar-")
     try {
@@ -152,9 +160,11 @@ abstract class DownloadVlcNativesTask @Inject constructor(
     files.entries.firstOrNull { (name, _) -> name.endsWith(suffix) }?.value
 
   private fun extractWindows(version: String, files: Map<String, File>, outRoot: File) {
-    val zip = findFile(files, "-win64.zip") ?: return
+    // Both the x86-64 (win64) and ARM64 (winarm64) bundles are plain .zip archives with the same
+    // vlc-<version>/ internal layout, so a single .zip finder covers either architecture.
+    val zip = findFile(files, ".zip") ?: return
     val blocklist = pluginBlocklist.get()
-    val winDir = File(outRoot, "windows-amd64")
+    val winDir = File(outRoot, platformDir.get())
     val zipRoot = "vlc-$version/"
     if (!File(winDir, "libvlc.dll").exists()) {
       logger.lifecycle("Extracting Windows natives...")
@@ -168,7 +178,7 @@ abstract class DownloadVlcNativesTask @Inject constructor(
         into(winDir)
       }
     }
-    val sevenZip = findFile(files, "-win64.7z")
+    val sevenZip = findFile(files, ".7z")
     if (sevenZip != null && !File(winDir, "sdk/libvlc.lib").exists()) {
       logger.lifecycle("Extracting Windows SDK import libraries...")
       extractLibsFrom7z(sevenZip, "vlc-$version/sdk/lib/", File(winDir, "sdk"))
@@ -179,7 +189,7 @@ abstract class DownloadVlcNativesTask @Inject constructor(
     val debs = downloadSpecs.get().filter { it["name"]!!.endsWith(".deb") }
     if (debs.isEmpty()) return
     val blocklist = pluginBlocklist.get()
-    val linuxDir = File(outRoot, "linux-amd64")
+    val linuxDir = File(outRoot, platformDir.get())
     if (!File(linuxDir, "libvlc.so.5").exists()) {
       logger.lifecycle("Extracting Linux natives...")
       val debStage = File(dlDir, "deb-stage")
@@ -187,7 +197,13 @@ abstract class DownloadVlcNativesTask @Inject constructor(
       debs.forEach { spec ->
         extractDeb(files[spec["name"]]!!, debStage)
       }
-      val usrLib = File(debStage, "usr/lib/x86_64-linux-gnu")
+      // Debian keeps the libraries under a per-architecture triplet directory
+      // (x86_64-linux-gnu on amd64, aarch64-linux-gnu on arm64), so detect it instead of
+      // hard-coding one architecture.
+      val libRoot = File(debStage, "usr/lib")
+      val usrLib = libRoot.listFiles()
+        ?.firstOrNull { it.isDirectory && it.name.endsWith("-linux-gnu") }
+        ?: File(libRoot, "x86_64-linux-gnu")
       fs.copy {
         from(usrLib) {
           include("libvlc.so*", "libvlccore.so*", "vlc/plugins/**", "vlc/libvlc_*.so")
@@ -210,9 +226,9 @@ abstract class DownloadVlcNativesTask @Inject constructor(
   }
 
   private fun extractMacOS(version: String, files: Map<String, File>, outRoot: File, dlDir: File) {
-    val macDir = File(outRoot, "macos-universal")
+    val macDir = File(outRoot, platformDir.get())
     if (File(macDir, "lib/libvlc.dylib").exists()) return
-    val dmg = findFile(files, "-universal.dmg") ?: return
+    val dmg = findFile(files, ".dmg") ?: return
     val sevenZip = listOf("7z", "7za").firstOrNull { tool ->
       try { ProcessBuilder(tool).start().waitFor(); true } catch (_: Exception) { false }
     }

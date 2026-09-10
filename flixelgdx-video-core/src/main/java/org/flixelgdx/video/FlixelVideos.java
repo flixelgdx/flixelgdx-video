@@ -23,31 +23,31 @@
  */
 package org.flixelgdx.video;
 
-import com.badlogic.gdx.Files;
-import com.badlogic.gdx.files.FileHandle;
-
 import org.flixelgdx.Flixel;
+import org.flixelgdx.file.FlixelFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 /**
- * Static helper that creates {@link FlixelVideo} instances from the platform backend
- * registered by your launcher.
+ * Static helper that creates {@link FlixelVideo} instances from the platform backend registered by
+ * your launcher.
  *
- * <p>Each platform module ships an installer that wires itself in here once, before
- * the game starts:
+ * <p>Each platform module ships an installer that wires itself in here once, before the game
+ * starts:
  *
  * <pre>{@code
  * public static void main(String[] args) {
  *   FlixelVlcVideoHandler.install();
- *   FlixelLwjgl3Launcher.launch(new MyGame());
+ *   FlixelDesktopLauncher.launch(new MyGame());
  * }
  * }</pre>
  *
- * <p>After that, creating a video anywhere in the game needs no further setup:
+ * <p>After that, creating a video anywhere in the game needs no further setup. Videos are located
+ * through {@link org.flixelgdx.Flixel#files}, the same file seam the rest of the framework loads
+ * assets through:
  *
  * <pre>{@code
- * FlixelVideo cutscene = FlixelVideos.create("videos/intro.mp4");
+ * FlixelVideo cutscene = FlixelVideos.create(Flixel.files.internal("videos/intro.mp4"));
  * add(cutscene);
  * cutscene.play();
  * }</pre>
@@ -63,43 +63,37 @@ public final class FlixelVideos {
   private FlixelVideos() {}
 
   /**
-   * Creates a new video for an internal asset path using the current platform backend.
+   * Creates a new video for the given file using the current platform backend.
    *
-   * @param path The path to the video file inside your assets, e.g. {@code "videos/intro.mp4"}.
+   * <p>Obtain the {@link FlixelFile} from {@link Flixel#files}: for example
+   * {@code Flixel.files.internal("videos/intro.mp4")} for a bundled asset, or
+   * {@code Flixel.files.absolute(path)} for a file elsewhere on disk.
+   *
+   * @param file The video file to play (must not be {@code null}).
    * @return A new video instance.
    * @throws IllegalStateException If no platform backend factory has been registered.
+   * @throws IllegalArgumentException If {@code file} is {@code null}.
    */
   @NotNull
-  public static FlixelVideo create(@NotNull String path) {
-    return createBackend(path, false);
-  }
-
-  /**
-   * Creates a new video from a libGDX file handle using the current platform backend.
-   *
-   * <p>Internal and classpath handles resolve through the asset manager (so packaged
-   * JAR assets work); absolute, external, and local handles are opened directly.
-   *
-   * @param file The video file handle.
-   * @return A new video instance.
-   * @throws IllegalStateException If no platform backend factory has been registered.
-   */
-  @NotNull
-  public static FlixelVideo create(@NotNull FileHandle file) {
-    boolean internal = file.type() == Files.FileType.Internal
-        || file.type() == Files.FileType.Classpath;
-    if (internal) {
-      return create(file.path());
+  public static FlixelVideo create(@NotNull FlixelFile file) {
+    if (file == null) {
+      throw new IllegalArgumentException("Video file cannot be null.");
     }
-    return createBackend(file.file().getAbsolutePath(), true);
+    FlixelVideoFactory factory = backendFactory;
+    if (factory == null) {
+      throw new IllegalStateException(
+          "No video backend factory registered. Call the platform installer first, e.g. "
+              + "FlixelVlcVideoHandler.install() in your desktop launcher or "
+              + "FlixelHtml5VideoHandler.install() in your web launcher.");
+    }
+    return factory.createVideo(file);
   }
 
   /**
    * Registers the platform video backend factory.
    *
-   * <p>Called once by the platform installer (for example
-   * {@code FlixelVlcVideoHandler.install()} on desktop or
-   * {@code FlixelTeaVMVideoHandler.install()} on the web) before any video is created.
+   * <p>Called once by the platform installer (for example {@code FlixelVlcVideoHandler.install()}
+   * on desktop or {@code FlixelHtml5VideoHandler.install()} on the web) before any video is created.
    *
    * @param factory The backend factory to use (must not be {@code null}).
    * @throws IllegalArgumentException If {@code factory} is {@code null}.
@@ -119,18 +113,5 @@ public final class FlixelVideos {
   @Nullable
   public static FlixelVideoFactory getBackendFactory() {
     return backendFactory;
-  }
-
-  @NotNull
-  private static FlixelVideo createBackend(@NotNull String path, boolean external) {
-    FlixelVideoFactory factory = backendFactory;
-    if (factory == null) {
-      throw new IllegalStateException(
-          "No video backend factory registered. Call the platform installer first, e.g. "
-              + "FlixelVlcVideoHandler.install() in your desktop launcher or "
-              + "FlixelTeaVMVideoHandler.install() in your web launcher.");
-    }
-    String resolved = external ? path : Flixel.ensureAssets().extractAssetPath(path);
-    return factory.createVideo(resolved, external);
   }
 }

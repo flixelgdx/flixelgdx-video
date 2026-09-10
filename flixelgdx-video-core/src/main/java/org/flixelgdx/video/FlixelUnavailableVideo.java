@@ -23,10 +23,7 @@
  */
 package org.flixelgdx.video;
 
-import com.badlogic.gdx.graphics.Texture;
-
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 
 /**
  * A do-nothing {@link FlixelVideo} used when video playback is unavailable.
@@ -118,12 +115,6 @@ public final class FlixelUnavailableVideo extends FlixelVideo {
   @Override
   protected int getMediaVideoHeight() {
     return 0;
-  }
-
-  @Nullable
-  @Override
-  protected Texture getMediaTexture() {
-    return null;
   }
 
   @Override

@@ -23,16 +23,17 @@
  */
 package org.flixelgdx.backend.html5.video;
 
+import org.flixelgdx.Flixel;
+import org.flixelgdx.backend.html5.graphics.FlixelHtml5Graphics;
 import org.flixelgdx.graphics.FlixelImage;
+import org.flixelgdx.graphics.FlixelTexture;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoQuality;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.JSObject;
-import org.teavm.jso.typedarrays.Int8Array;
-
-import java.nio.ByteBuffer;
+import org.teavm.jso.webgl.WebGLRenderingContext;
 
 /**
  * Web video backend built on a hidden HTML video element.
@@ -44,33 +45,17 @@ import java.nio.ByteBuffer;
  * backend uses, so videos draw through the regular batch and keep state draw order intact (a
  * sprite added after the video renders above it).
  *
- * <p>Each ready frame is drawn onto an offscreen canvas (downscaled for the lower
- * {@link FlixelVideoQuality} presets) and its pixels are read back with {@code getImageData}, which
- * gives the RGBA bytes core uploads. The canvas and the frame image are reused between frames, so
- * only the unavoidable browser read-back allocates.
+ * <p>Each ready frame is uploaded to the GPU with no Java-side allocation. At full quality the
+ * video element is passed directly to {@code texSubImage2D}, letting the browser copy pixels
+ * straight from the decoder to the GPU. At lower {@link FlixelVideoQuality} presets the frame is
+ * first drawn onto a reused offscreen canvas at the target size, and that canvas is passed to
+ * {@code texSubImage2D} instead. Both paths avoid any {@code getImageData} or {@code byte[]} copy.
  *
  * <p>Autoplay policies may block {@link #playMedia()} with sound before the first user
  * gesture; in that case playback resumes automatically on the next pointer or key
  * event (the rejection handler in {@link #jsPlay} registers one-shot listeners).
  */
 public class FlixelHtml5Video extends FlixelVideo {
-
-  /** currentTime (in seconds) of the last uploaded frame, to skip duplicate uploads. */
-  private double lastUploadedTime = -1.0;
-
-  /** The hidden video element doing the decoding. */
-  private final JSObject element;
-
-  /** Offscreen canvas used to draw each frame before its pixels are read back. */
-  @Nullable
-  private JSObject scaleCanvas;
-
-  /** Reusable CPU frame handed to {@link #updateFrame(FlixelImage)}; sized to the decode size. */
-  @Nullable
-  private FlixelImage frameImage;
-
-  @NotNull
-  private FlixelVideoQuality mediaQuality = FlixelVideoQuality.FULL;
 
   /** Dimensions the reusable frame image was allocated for. */
   private int imageWidth;
@@ -82,7 +67,35 @@ public class FlixelHtml5Video extends FlixelVideo {
   /** Seek requested before the element had metadata; applied once seekable. -1 = none. */
   private float pendingSeekMs = -1f;
 
+  /** The hidden video element doing the decoding. */
+  private final JSObject element;
+
+  /** Offscreen canvas used to draw each frame at quality-scaled dimensions before upload. */
+  @Nullable
+  private JSObject scaleCanvas;
+
+  /**
+   * The DOM element (video or canvas) to pass directly to {@code texSubImage2D} on the next
+   * frame upload. Set just before {@link #updateFrame(FlixelImage)} is called; consumed by
+   * {@link FlixelVideoWebGlTexture#update}.
+   */
+  @Nullable
+  private JSObject pendingJsSource;
+
+  /** Reusable CPU frame passed to {@link #updateFrame(FlixelImage)} for its dimensions only. */
+  @Nullable
+  private FlixelImage frameImage;
+
+  /** The specialized frame texture that accepts direct DOM element uploads. */
+  @Nullable
+  private FlixelVideoWebGlTexture videoTex;
+
+  @NotNull
+  private FlixelVideoQuality mediaQuality = FlixelVideoQuality.FULL;
+
   private boolean looping;
+  /** Set by {@link #applyMediaQuality} to force a re-read of the current frame on the next pump. */
+  private boolean forceNextFrame;
   private boolean ready;
   private boolean disposed;
 
@@ -226,9 +239,11 @@ public class FlixelHtml5Video extends FlixelVideo {
       return;
     }
     this.mediaQuality = quality;
-    // Force the frame to be re-read at the new decode size on the next pump; core rebuilds the
-    // texture automatically when the image size changes.
-    lastUploadedTime = -1.0;
+    // Force a re-read on the next pump so the frame is captured at the new scaled dimensions.
+    // When dimensions change, sizeChanged already triggers the re-read; forceNextFrame handles
+    // the edge case where the new scale produces the same pixel size as the old one (e.g., on a
+    // paused video where timeupdate will not fire to signal a new frame).
+    forceNextFrame = true;
   }
 
   @Override
@@ -245,6 +260,19 @@ public class FlixelHtml5Video extends FlixelVideo {
       return 0;
     }
     return scaledDimension(jsGetVideoHeight(element));
+  }
+
+  @NotNull
+  @Override
+  protected FlixelTexture createFrameTexture(int width, int height) {
+    WebGLRenderingContext glCtx = ((FlixelHtml5Graphics) Flixel.graphics).getGl();
+    if (glCtx == null) {
+      return super.createFrameTexture(width, height);
+    }
+    FlixelVideoWebGlTexture tex = new FlixelVideoWebGlTexture(glCtx, width, height);
+    tex.setDirectSource(pendingJsSource);
+    videoTex = tex;
+    return tex;
   }
 
   @Override
@@ -272,16 +300,37 @@ public class FlixelHtml5Video extends FlixelVideo {
       return;
     }
 
-    double time = jsGetTime(element);
     boolean sizeChanged = frameImage == null || width != imageWidth || height != imageHeight;
-    if (!sizeChanged && time == lastUploadedTime) {
+    boolean newFrame = jsConsumeFrameDirty(element);
+    if (!sizeChanged && !newFrame && !forceNextFrame) {
       return;
     }
+    forceNextFrame = false;
 
     FlixelImage image = ensureFrameImage(width, height);
-    grabFrame(image, width, height);
+
+    // Select the pixel source for this frame. For full quality, pass the video element directly
+    // to texSubImage2D -- no canvas readback, no Java copy. For scaled quality, draw to the
+    // offscreen canvas at the target size first, then pass that canvas.
+    if (mediaQuality == FlixelVideoQuality.FULL) {
+      pendingJsSource = element;
+    } else {
+      if (scaleCanvas == null) {
+        scaleCanvas = jsCreateCanvas();
+      }
+      jsDrawScaled(scaleCanvas, element, width, height);
+      pendingJsSource = scaleCanvas;
+    }
+
+    // If the texture already exists at the right size, prime its source now so the update() call
+    // inside updateFrame() picks it up. If the texture is null or the wrong size, createFrameTexture
+    // will set the source on the newly created texture before update() is called.
+    FlixelVideoWebGlTexture vTex = videoTex;
+    if (vTex != null) {
+      vTex.setDirectSource(pendingJsSource);
+    }
     updateFrame(image);
-    lastUploadedTime = time;
+    pendingJsSource = null;
     ready = true;
   }
 
@@ -293,7 +342,9 @@ public class FlixelHtml5Video extends FlixelVideo {
     disposed = true;
     jsDispose(element);
     scaleCanvas = null;
+    pendingJsSource = null;
     frameImage = null;
+    videoTex = null;
     ready = false;
   }
 
@@ -308,22 +359,6 @@ public class FlixelHtml5Video extends FlixelVideo {
       imageHeight = height;
     }
     return image;
-  }
-
-  /**
-   * Draws the current video frame onto the offscreen canvas and copies its RGBA pixels into the
-   * frame image. {@code getImageData} returns rows top-left first, which matches the layout core
-   * expects, so no vertical flip is needed.
-   */
-  private void grabFrame(@NotNull FlixelImage image, int width, int height) {
-    if (scaleCanvas == null) {
-      scaleCanvas = jsCreateCanvas();
-    }
-    jsDrawScaled(scaleCanvas, element, width, height);
-    Int8Array pixels = jsGetPixels(scaleCanvas, width, height);
-    ByteBuffer dest = image.getPixels();
-    dest.clear();
-    dest.put(pixels.copyToJavaArray());
   }
 
   private int scaledDimension(int sourceSize) {
@@ -343,9 +378,13 @@ public class FlixelHtml5Video extends FlixelVideo {
       + "v.playsInline = true;"
       + "v.flixelVolume = 1;"
       + "v.flixelLoop = false;"
+      + "v.flxFrameDirty = false;"
       + "v.addEventListener('loadedmetadata', function() {"
       + "  v.volume = v.flixelVolume;"
       + "  v.loop = v.flixelLoop;"
+      + "});"
+      + "v.addEventListener('timeupdate', function() {"
+      + "  v.flxFrameDirty = true;"
       + "});"
       + "v.load();"
       + "return v;")
@@ -404,6 +443,10 @@ public class FlixelHtml5Video extends FlixelVideo {
   @JSBody(params = { "v" }, script = "return v.readyState;")
   private static native int jsGetReadyState(JSObject v);
 
+  /** Reads and clears the frame-dirty flag set by the {@code timeupdate} listener. */
+  @JSBody(params = { "v" }, script = "var d = v.flxFrameDirty; v.flxFrameDirty = false; return d;")
+  private static native boolean jsConsumeFrameDirty(JSObject v);
+
   @JSBody(params = { "v" }, script = "return v.videoWidth;")
   private static native int jsGetVideoWidth(JSObject v);
 
@@ -422,10 +465,4 @@ public class FlixelHtml5Video extends FlixelVideo {
       + "if (canvas.height !== h) canvas.height = h;"
       + "canvas.getContext('2d').drawImage(v, 0, 0, w, h);")
   private static native void jsDrawScaled(JSObject canvas, JSObject v, int w, int h);
-
-  /** Reads the drawn frame back as tightly packed RGBA bytes (top-left row first). */
-  @JSBody(params = { "canvas", "w", "h" }, script = "var ctx = canvas.getContext('2d');"
-      + "var img = ctx.getImageData(0, 0, w, h);"
-      + "return new Int8Array(img.data.buffer);")
-  private static native Int8Array jsGetPixels(JSObject canvas, int w, int h);
 }

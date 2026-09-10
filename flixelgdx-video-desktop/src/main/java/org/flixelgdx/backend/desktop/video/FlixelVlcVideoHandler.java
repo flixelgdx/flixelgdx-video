@@ -21,21 +21,23 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.flixelgdx.backend.lwjgl3.video;
+package org.flixelgdx.backend.desktop.video;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.utils.Array;
 import com.sun.jna.Pointer;
 import com.sun.jna.StringArray;
 
 import org.flixelgdx.Flixel;
-import org.flixelgdx.FlixelGame;
-import org.flixelgdx.backend.lwjgl3.window.FlixelLwjgl3WindowListener;
+import org.flixelgdx.file.FlixelFile;
 import org.flixelgdx.video.FlixelUnavailableVideo;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoFactory;
 import org.flixelgdx.video.FlixelVideos;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 
 /**
  * Desktop video backend factory powered by libvlc.
@@ -45,7 +47,7 @@ import org.jetbrains.annotations.NotNull;
  * <pre>{@code
  * public static void main(String[] args) {
  *   FlixelVlcVideoHandler.install();
- *   FlixelLwjgl3Launcher.launch(new MyGame());
+ *   FlixelDesktopLauncher.launch(new MyGame());
  * }
  * }</pre>
  *
@@ -57,31 +59,23 @@ import org.jetbrains.annotations.NotNull;
  * <p>When no working VLC can be found at all, videos are still created; they just
  * stay in a never-ready state (see {@link FlixelUnavailableVideo}) and the
  * reason is logged, so a missing decoder degrades the game instead of crashing it.
+ *
+ * <p>Automatic pause and resume on focus changes is handled by {@link FlixelVideo} itself through
+ * the framework's window focus signals, so this factory only has to register itself.
  */
 public final class FlixelVlcVideoHandler implements FlixelVideoFactory {
-
-  private static final Array<FlixelVlcVideo> activeVideos = new Array<>(8);
 
   private static Pointer instance;
 
   /** Set after discovery fails once, so every later video degrades without re-probing. */
   private static boolean unavailable;
 
-  /** Guards focus hook registration so repeated {@link #install()} calls do not stack duplicates. */
-  private static boolean installed;
-
   /**
-   * Registers this handler as the video backend factory for {@link FlixelVideos} and wires
-   * up desktop focus hooks for automatic video pause/resume. Safe to call multiple times.
+   * Registers this handler as the video backend factory for {@link FlixelVideos}. Safe to call
+   * multiple times.
    */
   public static void install() {
     FlixelVideos.setBackendFactory(new FlixelVlcVideoHandler());
-    if (!installed) {
-      installed = true;
-      FlixelLwjgl3WindowListener.addFocusHooks(
-          FlixelVlcVideoHandler::onFocusGained,
-          FlixelVlcVideoHandler::onFocusLost);
-    }
   }
 
   /**
@@ -97,35 +91,82 @@ public final class FlixelVlcVideoHandler implements FlixelVideoFactory {
     return LibVlc.libvlc_get_version();
   }
 
+  @NotNull
   @Override
-  public FlixelVideo createVideo(String path, boolean external) {
+  public FlixelVideo createVideo(@NotNull FlixelFile file) {
     // A broken or missing VLC installation must not crash the game: the video
     // degrades to a backend that is never ready, and the reason is logged loudly so
     // the problem is diagnosable.
     if (unavailable) {
       return new FlixelUnavailableVideo();
     }
+    String path = resolvePath(file);
+    if (path == null) {
+      Flixel.error("FlixelVideo", "Video file could not be found: " + file.getPath());
+      return new FlixelUnavailableVideo();
+    }
     try {
       ensureInstance();
     } catch (IllegalStateException | LinkageError error) {
       unavailable = true;
-      Gdx.app.error("FlixelVideo", "Video playback is disabled for this session: " + error.getMessage());
+      Flixel.error("FlixelVideo", "Video playback is disabled for this session: " + error.getMessage());
       return new FlixelUnavailableVideo();
     }
     try {
       return new FlixelVlcVideo(instance, path);
     } catch (IllegalStateException error) {
-      Gdx.app.error("FlixelVideo", error.getMessage());
+      Flixel.error("FlixelVideo", error.getMessage());
       return new FlixelUnavailableVideo();
     }
   }
 
-  static void track(FlixelVlcVideo video) {
-    activeVideos.add(video);
+  /**
+   * Turns a file handle into an absolute filesystem path libvlc can open.
+   *
+   * <p>Most handles (internal assets during development, external, and absolute files) are already
+   * backed by a real file on disk, so their path is used directly. A handle that exists only inside
+   * the classpath (for example an asset packed into a released JAR) has no filesystem path, so its
+   * bytes are extracted once to a temporary file that libvlc can read.
+   *
+   * @param file The video file handle.
+   * @return An absolute filesystem path, or {@code null} when the file cannot be found.
+   */
+  @Nullable
+  private static String resolvePath(@NotNull FlixelFile file) {
+    Object handle = file.getNativeHandle();
+    if (handle instanceof File onDisk && onDisk.isFile()) {
+      return onDisk.getAbsolutePath();
+    }
+    if (file.exists()) {
+      return extractToTemp(file);
+    }
+    return null;
   }
 
-  static void untrack(FlixelVlcVideo video) {
-    activeVideos.removeValue(video, true);
+  /**
+   * Extracts a classpath-only video to a temporary file so libvlc has a path to open.
+   *
+   * @param file The video file handle to read.
+   * @return The temporary file's absolute path, or {@code null} when the bytes could not be read.
+   */
+  @Nullable
+  private static String extractToTemp(@NotNull FlixelFile file) {
+    try {
+      byte[] bytes = file.readBytes();
+      if (bytes.length == 0) {
+        return null;
+      }
+      String name = file.getName();
+      int dot = name.lastIndexOf('.');
+      String suffix = dot >= 0 ? name.substring(dot) : ".video";
+      File temp = File.createTempFile("flixel-video-", suffix);
+      temp.deleteOnExit();
+      Files.write(temp.toPath(), bytes);
+      return temp.getAbsolutePath();
+    } catch (IOException error) {
+      Flixel.error("FlixelVideo", "Could not extract video '" + file.getPath() + "': " + error.getMessage());
+      return null;
+    }
   }
 
   private static synchronized void ensureInstance() {
@@ -133,7 +174,7 @@ public final class FlixelVlcVideoHandler implements FlixelVideoFactory {
       return;
     }
     LibVlc.register(FlixelVlcDiscovery.load());
-    // HVideo output is negotiated per player through the vmem callbacks, so libvlc never opens a window.
+    // Video output is negotiated per player through the vmem callbacks, so libvlc never opens a window.
     String[] args = { "--intf=dummy", "--quiet", "--no-xlib" };
     Pointer created = LibVlc.libvlc_new(args.length, new StringArray(args));
     if (created == null) {
@@ -143,23 +184,7 @@ public final class FlixelVlcVideoHandler implements FlixelVideoFactory {
     instance = created;
     // A one-time confirmation of which libvlc actually satisfied the game, so a
     // "plugins cannot be found" report can be traced to the exact install that loaded.
-    Gdx.app.log("FlixelVideo", "libvlc " + LibVlc.libvlc_get_version()
+    Flixel.info("FlixelVideo", "libvlc " + LibVlc.libvlc_get_version()
         + " initialized from " + FlixelVlcDiscovery.getLoadedFrom() + ".");
-  }
-
-  private static void onFocusLost() {
-    FlixelGame game = Flixel.game;
-    if (game == null || !game.autoPause) {
-      return;
-    }
-    for (int i = 0, n = activeVideos.size; i < n; i++) {
-      activeVideos.get(i).autoPause();
-    }
-  }
-
-  private static void onFocusGained() {
-    for (int i = 0, n = activeVideos.size; i < n; i++) {
-      activeVideos.get(i).autoResume();
-    }
   }
 }

@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.flixelgdx.backend.lwjgl3.video;
+package org.flixelgdx.backend.desktop.video;
 
 import com.sun.jna.Library;
 import com.sun.jna.Native;
@@ -63,7 +63,7 @@ import java.util.jar.JarFile;
  *       the libvlc shared library and its {@code plugins} folder.</li>
  *   <li>A {@code vlc/} directory next to the game's working directory (for games that
  *       ship VLC alongside the executable).</li>
- *   <li>The natives bundled inside the {@code flixelgdx-video-lwjgl3} JAR under
+ *   <li>The natives bundled inside the {@code flixelgdx-video-desktop} JAR under
  *       {@code org/flixelgdx/video/natives/}, extracted once to a per-user cache. On
  *       Windows and macOS these are the official self-contained VideoLAN builds and
  *       are preferred over a system install.</li>
@@ -422,17 +422,24 @@ final class FlixelVlcDiscovery {
 
   @NotNull
   private static String platformDirectory() {
+    boolean arm = isAarch64();
     if (isWindows()) {
-      return "windows-amd64";
+      return arm ? "windows-aarch64" : "windows-amd64";
     }
     if (isMac()) {
+      // The macOS bundle is a universal binary, so one directory serves both architectures.
       return "macos-universal";
     }
-    return "linux-amd64";
+    return arm ? "linux-aarch64" : "linux-amd64";
   }
 
   private static boolean isWindows() {
     return osName().contains("windows");
+  }
+
+  private static boolean isAarch64() {
+    String arch = System.getProperty("os.arch", "").toLowerCase(Locale.ROOT);
+    return arch.equals("aarch64") || arch.equals("arm64");
   }
 
   private static boolean isMac() {

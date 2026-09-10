@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.flixelgdx.backend.lwjgl3.video;
+package org.flixelgdx.backend.desktop.video;
 
 import com.sun.jna.Callback;
 import com.sun.jna.Native;

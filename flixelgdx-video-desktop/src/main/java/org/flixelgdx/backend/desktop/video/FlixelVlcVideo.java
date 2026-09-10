@@ -21,24 +21,19 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.flixelgdx.backend.lwjgl3.video;
+package org.flixelgdx.backend.desktop.video;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.glutils.GLOnlyTextureData;
 import com.sun.jna.Memory;
 import com.sun.jna.Pointer;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.PointerByReference;
 
+import org.flixelgdx.Flixel;
+import org.flixelgdx.graphics.FlixelImage;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoQuality;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
-import org.lwjgl.opengl.GL11C;
-import org.lwjgl.opengl.GL15C;
-import org.lwjgl.opengl.GL21C;
 
 import java.nio.ByteBuffer;
 
@@ -50,16 +45,16 @@ import java.nio.ByteBuffer;
  * libvlc one of two pre-allocated native pixel buffers to decode into, and the display
  * callback flips a dirty flag. Audio decoding and output stay entirely inside libvlc.
  *
- * <p>On the render thread, {@link #updateMedia(float)} streams the latest completed
- * frame into a reusable {@link Texture} through two ping-ponged pixel buffer objects:
- * each frame the pixels are written into one PBO (orphaned first so the driver never
- * blocks on the previous transfer) while the texture upload reads from it via DMA, and
- * the next frame uses the other PBO. All buffers, textures, and PBOs are allocated once
- * per format and reused; the per-frame path allocates nothing.
+ * <p>On the render thread, {@link #updateMedia(float)} copies the latest completed frame from the
+ * native decode buffer into a reusable {@link FlixelImage} and hands it to
+ * {@link #updateFrame(FlixelImage)}. Core then keeps a single GPU texture alive and scrubs its
+ * pixels, so this backend never touches the graphics API directly; the same code path uploads
+ * frames on every renderer. The two native buffers, the pixel views over them, and the frame image
+ * are all allocated once per format and reused, so the per-frame path allocates nothing.
  *
- * <p>Threading contract: every public method must be called on the render thread. The
- * inner callbacks run on libvlc decoder threads and only touch the shared frame buffers
- * under {@code bufferLock} plus a handful of volatile flags.
+ * <p>Threading contract: every {@code protected} method here is called on the render thread. The
+ * inner callbacks run on libvlc decoder threads and only touch the shared frame buffers under
+ * {@code bufferLock} plus a handful of volatile flags.
  */
 public class FlixelVlcVideo extends FlixelVideo {
 
@@ -69,11 +64,8 @@ public class FlixelVlcVideo extends FlixelVideo {
   /** Native pixel buffers libvlc decodes into; index flipped on every displayed frame. */
   private final Memory[] frameBuffers = new Memory[2];
 
-  /** Direct views over {@link #frameBuffers}, reused for the PBO copies. */
+  /** Direct views over {@link #frameBuffers}, reused for the per-frame copy. */
   private final ByteBuffer[] frameViews = new ByteBuffer[2];
-
-  /** Ping-ponged pixel buffer object handles for asynchronous texture uploads. */
-  private final int[] pbos = new int[2];
 
   /** Reused out-parameters for libvlc_video_get_size (avoids per-frame allocation). */
   private final IntByReference sizeWidthRef = new IntByReference();
@@ -82,8 +74,9 @@ public class FlixelVlcVideo extends FlixelVideo {
   private Pointer mediaPlayer;
   private Pointer eventManager;
 
+  /** Reusable CPU frame handed to {@link #updateFrame(FlixelImage)}; sized to the decode buffer. */
   @Nullable
-  private Texture texture;
+  private FlixelImage frameImage;
 
   @NotNull
   private volatile FlixelVideoQuality mediaQuality = FlixelVideoQuality.FULL;
@@ -109,7 +102,7 @@ public class FlixelVlcVideo extends FlixelVideo {
   /**
    * Codec buffers carry alignment padding rows below the visible picture (a 1080p
    * H.264 stream decodes into a 1088 or 1090 row buffer). These are the dimensions of
-   * the real picture inside the texture, derived from libvlc_video_get_size(...).
+   * the real picture inside the frame, derived from libvlc_video_get_size(...).
    * Render thread only.
    */
   private int visibleWidth;
@@ -125,15 +118,12 @@ public class FlixelVlcVideo extends FlixelVideo {
   /** Which frame buffer holds the latest displayed frame. Guarded by {@link #bufferLock}. */
   private int readyIndex = -1;
 
-  /** Which PBO receives the next upload. Render thread only. */
-  private int pboIndex;
-
   /** Size in bytes of the current frame buffers. */
   private int frameBytes;
 
-  /** Width/height the GPU objects were created for. Render thread only. */
-  private int textureWidth;
-  private int textureHeight;
+  /** Width/height the reusable frame image was allocated for. Render thread only. */
+  private int imageWidth;
+  private int imageHeight;
 
   private float desiredVolume = 1f;
   private float desiredRate = 1f;
@@ -141,7 +131,7 @@ public class FlixelVlcVideo extends FlixelVideo {
   /** Seek queued until the player actually reaches a seekable state. -1 = none. */
   private float pendingSeekMs = -1f;
 
-  /** Set by the display callback when a new frame is ready for upload. */
+  /** Set by the display callback when a new frame is ready to copy. */
   private volatile boolean frameDirty;
 
   /** Set by the end-reached event; consumed on the render thread. */
@@ -196,7 +186,6 @@ public class FlixelVlcVideo extends FlixelVideo {
     eventManager = LibVlc.libvlc_media_player_event_manager(mediaPlayer);
     LibVlc.libvlc_event_attach(eventManager, LibVlc.EVENT_END_REACHED, eventCallback, null);
     LibVlc.libvlc_event_attach(eventManager, LibVlc.EVENT_ENCOUNTERED_ERROR, eventCallback, null);
-    FlixelVlcVideoHandler.track(this);
   }
 
   @Override
@@ -375,7 +364,7 @@ public class FlixelVlcVideo extends FlixelVideo {
 
     if (playbackError) {
       playbackError = false;
-      Gdx.app.error("FlixelVideo", "libvlc reported a playback error; the video was stopped.");
+      Flixel.error("FlixelVideo", "libvlc reported a playback error; the video was stopped.");
     }
 
     if (endReached) {
@@ -419,34 +408,18 @@ public class FlixelVlcVideo extends FlixelVideo {
   }
 
   @Override
-  @Nullable
-  protected Texture getMediaTexture() {
-    return ready ? texture : null;
-  }
-
-  @Override
   protected void disposeMedia() {
     if (disposed) {
       return;
     }
     disposed = true;
     autoPaused = false;
-    FlixelVlcVideoHandler.untrack(this);
     LibVlc.libvlc_event_detach(eventManager, LibVlc.EVENT_END_REACHED, eventCallback, null);
     LibVlc.libvlc_event_detach(eventManager, LibVlc.EVENT_ENCOUNTERED_ERROR, eventCallback, null);
     LibVlc.libvlc_media_player_stop(mediaPlayer);
     LibVlc.libvlc_media_player_release(mediaPlayer);
     mediaPlayer = null;
     eventManager = null;
-    if (texture != null) {
-      texture.dispose();
-      texture = null;
-    }
-    if (pbos[0] != 0) {
-      GL15C.glDeleteBuffers(pbos);
-      pbos[0] = 0;
-      pbos[1] = 0;
-    }
     synchronized (bufferLock) {
       frameBuffers[0] = null;
       frameBuffers[1] = null;
@@ -454,65 +427,50 @@ public class FlixelVlcVideo extends FlixelVideo {
       frameViews[1] = null;
       readyIndex = -1;
     }
+    frameImage = null;
     ready = false;
   }
 
-  void autoPause() {
-    if (isMediaPlaying()) {
-      pauseMedia();
-      autoPaused = true;
-    }
-  }
-
-  void autoResume() {
-    if (autoPaused) {
-      autoPaused = false;
-      resumeMedia();
-    }
-  }
-
   /**
-   * Streams the most recent completed frame into the texture through the PBO pair.
+   * Copies the most recent completed frame into the reusable image and hands it to core.
    *
-   * <p>The write PBO is orphaned before the copy so the driver can hand back fresh
-   * storage instead of stalling on an in-flight transfer, and the texture upload reads
-   * from the PBO (a GPU-side DMA), not from client memory. Alternating PBOs each frame
-   * keeps the copy of frame N independent from the upload of frame N-1.
+   * <p>The native-to-image copy runs under {@code bufferLock} so the dimensions, byte count, and
+   * frame contents stay consistent even if libvlc renegotiates the format mid-play; if libvlc wants
+   * to swap buffers meanwhile it briefly waits, which beats copying a torn frame. The GPU upload
+   * itself happens outside the lock through {@link #updateFrame(FlixelImage)}.
    */
   private void uploadLatestFrame() {
-    // The whole upload runs under bufferLock so the dimensions, byte count, and frame
-    // contents stay consistent even if libvlc renegotiates the format mid-play. The
-    // lock is only held for the PBO copy (about a millisecond); if libvlc wants to
-    // swap buffers meanwhile it briefly waits, which beats showing a torn frame.
+    FlixelImage image;
     synchronized (bufferLock) {
       int width = frameWidth;
       int height = frameHeight;
       if (width <= 0 || height <= 0 || readyIndex < 0) {
         return;
       }
-      ensureGpuObjects(width, height);
-      Texture target = texture;
-      if (target == null) {
-        return;
-      }
-
-      int pbo = pbos[pboIndex];
-      pboIndex ^= 1;
-
-      GL15C.glBindBuffer(GL21C.GL_PIXEL_UNPACK_BUFFER, pbo);
-      GL15C.glBufferData(GL21C.GL_PIXEL_UNPACK_BUFFER, frameBytes, GL15C.GL_STREAM_DRAW);
-      ByteBuffer frame = frameViews[readyIndex];
-      frame.clear();
-      GL15C.glBufferSubData(GL21C.GL_PIXEL_UNPACK_BUFFER, 0, frame);
+      image = ensureFrameImage(width, height);
+      ByteBuffer source = frameViews[readyIndex];
+      source.clear();
+      ByteBuffer dest = image.getPixels();
+      dest.clear();
+      dest.put(source);
       frameDirty = false;
-
-      target.bind();
-      GL11C.glTexSubImage2D(GL11C.GL_TEXTURE_2D, 0, 0, 0, width, height,
-          GL11C.GL_RGBA, GL11C.GL_UNSIGNED_BYTE, 0L);
-      GL15C.glBindBuffer(GL21C.GL_PIXEL_UNPACK_BUFFER, 0);
-      ready = true;
     }
+    updateFrame(image);
+    ready = true;
     updateVisibleSize();
+  }
+
+  /** Allocates (or reuses) the CPU frame image at the current decode buffer size. */
+  @NotNull
+  private FlixelImage ensureFrameImage(int width, int height) {
+    FlixelImage image = frameImage;
+    if (image == null || imageWidth != width || imageHeight != height) {
+      image = new FlixelImage(width, height);
+      frameImage = image;
+      imageWidth = width;
+      imageHeight = height;
+    }
+    return image;
   }
 
   /**
@@ -520,7 +478,7 @@ public class FlixelVlcVideo extends FlixelVideo {
    *
    * <p>libvlc reports the true display resolution through libvlc_video_get_size(...);
    * scaling it by the ratio between our decode buffer and the source buffer maps it
-   * into texture pixels, so draw code can crop away the codec padding rows.
+   * into frame pixels, so draw code can crop away the codec padding rows.
    */
   private void updateVisibleSize() {
     int width = frameWidth;
@@ -545,27 +503,6 @@ public class FlixelVlcVideo extends FlixelVideo {
     visibleHeight = Math.min(height, Math.round(height * (displayHeight / (float) sourceHeight)));
     visibleBasisWidth = width;
     visibleBasisHeight = height;
-  }
-
-  /** (Re)creates the texture and PBO pair when the decoded frame size changes. */
-  private void ensureGpuObjects(int width, int height) {
-    if (texture != null && width == textureWidth && height == textureHeight) {
-      return;
-    }
-    if (texture != null) {
-      texture.dispose();
-    }
-    texture = new Texture(new GLOnlyTextureData(width, height, 0,
-        GL20.GL_RGBA, GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE));
-    texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-    texture.setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
-    textureWidth = width;
-    textureHeight = height;
-    if (pbos[0] == 0) {
-      GL15C.glGenBuffers(pbos);
-    }
-    pboIndex = 0;
-    ready = false;
   }
 
   /** libvlc format negotiation; runs on a libvlc thread. */

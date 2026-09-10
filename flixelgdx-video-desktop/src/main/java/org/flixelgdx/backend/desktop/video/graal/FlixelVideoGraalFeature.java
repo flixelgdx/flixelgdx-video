@@ -21,7 +21,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.flixelgdx.backend.lwjgl3.video.graal;
+package org.flixelgdx.backend.desktop.video.graal;
 
 import com.sun.jna.Callback;
 import com.sun.jna.CallbackReference;
@@ -39,7 +39,7 @@ import org.graalvm.nativeimage.hosted.RuntimeReflection;
  * GraalVM native image Feature that registers the JNA entry points the video
  * extension's libvlc bindings need at run time.
  *
- * <p>Activated automatically when the {@code flixelgdx-video-lwjgl3} JAR is on the
+ * <p>Activated automatically when the {@code flixelgdx-video-desktop} JAR is on the
  * native-image classpath, via
  * {@code META-INF/native-image/org.flixelgdx.video/native-image.properties}. Game
  * projects do not need to configure anything; JNA itself additionally ships its own
@@ -88,12 +88,12 @@ public class FlixelVideoGraalFeature implements Feature {
    */
   private void registerVideoCallbacks(BeforeAnalysisAccess access) {
     String[] callbackTypes = {
-        "org.flixelgdx.backend.lwjgl3.video.LibVlc$LockCallback",
-        "org.flixelgdx.backend.lwjgl3.video.LibVlc$UnlockCallback",
-        "org.flixelgdx.backend.lwjgl3.video.LibVlc$DisplayCallback",
-        "org.flixelgdx.backend.lwjgl3.video.LibVlc$FormatCallback",
-        "org.flixelgdx.backend.lwjgl3.video.LibVlc$CleanupCallback",
-        "org.flixelgdx.backend.lwjgl3.video.LibVlc$EventCallback"
+        "org.flixelgdx.backend.desktop.video.LibVlc$LockCallback",
+        "org.flixelgdx.backend.desktop.video.LibVlc$UnlockCallback",
+        "org.flixelgdx.backend.desktop.video.LibVlc$DisplayCallback",
+        "org.flixelgdx.backend.desktop.video.LibVlc$FormatCallback",
+        "org.flixelgdx.backend.desktop.video.LibVlc$CleanupCallback",
+        "org.flixelgdx.backend.desktop.video.LibVlc$EventCallback"
     };
     for (String typeName : callbackTypes) {
       Class<?> type = access.findClassByName(typeName);

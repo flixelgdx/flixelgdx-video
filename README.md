@@ -159,7 +159,7 @@ crashing the game.
 - **[COMPILING.md](COMPILING.md)** - how to build and test the extension locally, including the
   recommended composite build against a local framework clone.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - contribution guidelines (shared with the main framework).
-- **[PROJECT.md](PROJECT.md)** - the module layout and build system overview.
+- **[PROJECT.md](ARCHITECTURE.md)** - the module layout and build system overview.
 
 ---
 

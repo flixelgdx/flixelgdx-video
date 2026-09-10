@@ -15,4 +15,4 @@ The only thing specific to this repository is how you build and test the video e
 since it depends on the framework rather than standing alone. That is documented separately in the
 **[COMPILING.md](COMPILING.md)** document.
 
-For the module layout of this repository, see **[PROJECT.md](PROJECT.md)**.
+For the module layout of this repository, see **[PROJECT.md](ARCHITECTURE.md)**.

@@ -21,68 +21,66 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package org.flixelgdx.backend.teavm.video;
+package org.flixelgdx.backend.html5.video;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.graphics.GL20;
-import com.badlogic.gdx.graphics.Pixmap;
-import com.badlogic.gdx.graphics.Texture;
-import com.badlogic.gdx.graphics.TextureData;
-import com.github.xpenatan.gdx.teavm.backends.web.WebGL20;
-import com.github.xpenatan.gdx.teavm.backends.web.gl.WebGLRenderingContextExt;
-
+import org.flixelgdx.graphics.FlixelImage;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoQuality;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.JSObject;
-import org.teavm.jso.dom.html.HTMLVideoElement;
+import org.teavm.jso.typedarrays.Int8Array;
+
+import java.nio.ByteBuffer;
 
 /**
  * Web video backend built on a hidden HTML video element.
  *
  * <p>The video element is used strictly as a decoding source and is never attached to
  * the DOM, so it cannot float above or below the game canvas; every frame is pulled
- * into a WebGL texture and drawn by the regular batch, which keeps state draw order
- * intact (a sprite added after the video renders above it).
+ * into a {@link FlixelImage} and handed to core, which keeps a single texture alive and
+ * scrubs its pixels. That is the same "reuse one texture, rewrite its pixels" path the desktop
+ * backend uses, so videos draw through the regular batch and keep state draw order intact (a
+ * sprite added after the video renders above it).
  *
- * <p>At {@link FlixelVideoQuality#FULL} quality each new frame goes straight through
- * {@code texImage2D(..., video)}, which browsers implement as a GPU-to-GPU transfer
- * whenever the decoder runs on the GPU. Lower presets route through an offscreen
- * canvas ({@code drawImage} downscale, then {@code texImage2D(..., canvas)}).
+ * <p>Each ready frame is drawn onto an offscreen canvas (downscaled for the lower
+ * {@link FlixelVideoQuality} presets) and its pixels are read back with {@code getImageData}, which
+ * gives the RGBA bytes core uploads. The canvas and the frame image are reused between frames, so
+ * only the unavoidable browser read-back allocates.
  *
  * <p>Autoplay policies may block {@link #playMedia()} with sound before the first user
  * gesture; in that case playback resumes automatically on the next pointer or key
  * event (the rejection handler in {@link #jsPlay} registers one-shot listeners).
  */
-public class FlixelTeaVMVideo extends FlixelVideo {
+public class FlixelHtml5Video extends FlixelVideo {
+
+  /** currentTime (in seconds) of the last uploaded frame, to skip duplicate uploads. */
+  private double lastUploadedTime = -1.0;
 
   /** The hidden video element doing the decoding. */
   private final JSObject element;
 
-  /** Offscreen canvas used only for the downscaled quality presets. */
+  /** Offscreen canvas used to draw each frame before its pixels are read back. */
   @Nullable
   private JSObject scaleCanvas;
 
+  /** Reusable CPU frame handed to {@link #updateFrame(FlixelImage)}; sized to the decode size. */
   @Nullable
-  private Texture texture;
+  private FlixelImage frameImage;
 
   @NotNull
   private FlixelVideoQuality mediaQuality = FlixelVideoQuality.FULL;
 
-  /** Texture dimensions currently allocated on the GPU. */
-  private int textureWidth;
-  private int textureHeight;
+  /** Dimensions the reusable frame image was allocated for. */
+  private int imageWidth;
+  private int imageHeight;
 
   private float volume = 1f;
   private float rate = 1f;
 
   /** Seek requested before the element had metadata; applied once seekable. -1 = none. */
   private float pendingSeekMs = -1f;
-
-  /** currentTime (in seconds) of the last uploaded frame, to skip duplicate uploads. */
-  private double lastUploadedTime = -1.0;
 
   private boolean looping;
   private boolean ready;
@@ -93,7 +91,7 @@ public class FlixelTeaVMVideo extends FlixelVideo {
    *
    * @param url The video URL, typically an internal asset path relative to the page.
    */
-  public FlixelTeaVMVideo(@NotNull String url) {
+  public FlixelHtml5Video(@NotNull String url) {
     super();
     element = jsCreateVideo(url);
   }
@@ -228,13 +226,9 @@ public class FlixelTeaVMVideo extends FlixelVideo {
       return;
     }
     this.mediaQuality = quality;
-    // Force the texture to be recreated at the new decode size on the next frame.
+    // Force the frame to be re-read at the new decode size on the next pump; core rebuilds the
+    // texture automatically when the image size changes.
     lastUploadedTime = -1.0;
-    if (texture != null) {
-      texture.dispose();
-      texture = null;
-      ready = false;
-    }
   }
 
   @Override
@@ -279,23 +273,16 @@ public class FlixelTeaVMVideo extends FlixelVideo {
     }
 
     double time = jsGetTime(element);
-    boolean firstFrame = texture == null || width != textureWidth || height != textureHeight;
-    if (!firstFrame && time == lastUploadedTime) {
+    boolean sizeChanged = frameImage == null || width != imageWidth || height != imageHeight;
+    if (!sizeChanged && time == lastUploadedTime) {
       return;
     }
 
-    if (firstFrame) {
-      recreateTexture(width, height);
-    }
-    uploadFrame(width, height);
+    FlixelImage image = ensureFrameImage(width, height);
+    grabFrame(image, width, height);
+    updateFrame(image);
     lastUploadedTime = time;
     ready = true;
-  }
-
-  @Override
-  @Nullable
-  protected Texture getMediaTexture() {
-    return ready ? texture : null;
   }
 
   @Override
@@ -305,45 +292,38 @@ public class FlixelTeaVMVideo extends FlixelVideo {
     }
     disposed = true;
     jsDispose(element);
-    if (texture != null) {
-      texture.dispose();
-      texture = null;
-    }
     scaleCanvas = null;
+    frameImage = null;
     ready = false;
   }
 
-  /** Allocates (or reallocates) the GPU texture at the current decode size. */
-  private void recreateTexture(int width, int height) {
-    if (texture != null) {
-      texture.dispose();
+  /** Allocates (or reuses) the CPU frame image at the current decode size. */
+  @NotNull
+  private FlixelImage ensureFrameImage(int width, int height) {
+    FlixelImage image = frameImage;
+    if (image == null || imageWidth != width || imageHeight != height) {
+      image = new FlixelImage(width, height);
+      frameImage = image;
+      imageWidth = width;
+      imageHeight = height;
     }
-    texture = new Texture(new WebVideoTextureData(width, height));
-    // NPOT video dimensions in WebGL 1 require clamping and no mipmaps.
-    texture.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
-    texture.setWrap(Texture.TextureWrap.ClampToEdge, Texture.TextureWrap.ClampToEdge);
-    textureWidth = width;
-    textureHeight = height;
+    return image;
   }
 
-  /** Pulls the current video frame into the bound GL texture. */
-  private void uploadFrame(int width, int height) {
-    Texture target = texture;
-    if (target == null) {
-      return;
+  /**
+   * Draws the current video frame onto the offscreen canvas and copies its RGBA pixels into the
+   * frame image. {@code getImageData} returns rows top-left first, which matches the layout core
+   * expects, so no vertical flip is needed.
+   */
+  private void grabFrame(@NotNull FlixelImage image, int width, int height) {
+    if (scaleCanvas == null) {
+      scaleCanvas = jsCreateCanvas();
     }
-    Gdx.gl.glBindTexture(GL20.GL_TEXTURE_2D, target.getTextureObjectHandle());
-    if (mediaQuality == FlixelVideoQuality.FULL) {
-      HTMLVideoElement video = element.cast();
-      context().texImage2D(GL20.GL_TEXTURE_2D, 0, GL20.GL_RGBA, GL20.GL_RGBA,
-          GL20.GL_UNSIGNED_BYTE, video);
-    } else {
-      if (scaleCanvas == null) {
-        scaleCanvas = jsCreateCanvas();
-      }
-      jsDrawScaled(scaleCanvas, element, width, height);
-      jsTexImage2DCanvas(context(), scaleCanvas);
-    }
+    jsDrawScaled(scaleCanvas, element, width, height);
+    Int8Array pixels = jsGetPixels(scaleCanvas, width, height);
+    ByteBuffer dest = image.getPixels();
+    dest.clear();
+    dest.put(pixels.copyToJavaArray());
   }
 
   private int scaledDimension(int sourceSize) {
@@ -354,16 +334,6 @@ public class FlixelTeaVMVideo extends FlixelVideo {
       return sourceSize;
     }
     return Math.max(2, Math.round(sourceSize * mediaQuality.getScale()));
-  }
-
-  @NotNull
-  private static WebGLRenderingContextExt context() {
-    if (Gdx.gl20 instanceof WebGL20 webGl) {
-      return webGl.gl;
-    }
-    throw new IllegalStateException(
-        "FlixelGDX video requires the standard WebGL20 backend (got "
-            + (Gdx.gl20 == null ? "no GL20" : Gdx.gl20.getClass().getName()) + ").");
   }
 
   @JSBody(params = { "url" }, script = "var v = document.createElement('video');"
@@ -448,77 +418,14 @@ public class FlixelTeaVMVideo extends FlixelVideo {
   @JSBody(script = "return document.createElement('canvas');")
   private static native JSObject jsCreateCanvas();
 
-  @JSBody(params = { "canvas", "v", "w", "h" }, script = """
-      if (canvas.width !== w) canvas.width = w;"
+  @JSBody(params = { "canvas", "v", "w", "h" }, script = "if (canvas.width !== w) canvas.width = w;"
       + "if (canvas.height !== h) canvas.height = h;"
-      + "canvas.getContext('2d').drawImage(v, 0, 0, w, h);""")
+      + "canvas.getContext('2d').drawImage(v, 0, 0, w, h);")
   private static native void jsDrawScaled(JSObject canvas, JSObject v, int w, int h);
 
-  /** texImage2D from a canvas source: 3553 = TEXTURE_2D, 6408 = RGBA, 5121 = UNSIGNED_BYTE. */
-  @JSBody(params = { "ctx", "canvas" }, script = "ctx.texImage2D(3553, 0, 6408, 6408, 5121, canvas);")
-  private static native void jsTexImage2DCanvas(JSObject ctx, JSObject canvas);
-
-  /**
-   * Custom texture data that allocates GPU storage for the video frames.
-   *
-   * <p>The actual pixels are re-specified every frame by {@code texImage2D} with a
-   * video or canvas source, so this only performs the initial allocation that gives
-   * the libGDX {@link Texture} wrapper its correct dimensions for UV math.
-   */
-  private record WebVideoTextureData(int width, int height) implements TextureData {
-
-    @Override
-    public TextureDataType getType() {
-      return TextureDataType.Custom;
-    }
-
-    @Override
-    public boolean isPrepared() {
-      return true;
-    }
-
-    @Override
-    public void prepare() {}
-
-    @Override
-    public Pixmap consumePixmap() {
-      throw new UnsupportedOperationException("This TextureData implementation is custom.");
-    }
-
-    @Override
-    public boolean disposePixmap() {
-      return false;
-    }
-
-    @Override
-    public void consumeCustomData(int target) {
-      Gdx.gl.glTexImage2D(target, 0, GL20.GL_RGBA, width, height, 0,
-          GL20.GL_RGBA, GL20.GL_UNSIGNED_BYTE, null);
-    }
-
-    @Override
-    public int getWidth() {
-      return width;
-    }
-
-    @Override
-    public int getHeight() {
-      return height;
-    }
-
-    @Override
-    public Pixmap.Format getFormat() {
-      return Pixmap.Format.RGBA8888;
-    }
-
-    @Override
-    public boolean useMipMaps() {
-      return false;
-    }
-
-    @Override
-    public boolean isManaged() {
-      return false;
-    }
-  }
+  /** Reads the drawn frame back as tightly packed RGBA bytes (top-left row first). */
+  @JSBody(params = { "canvas", "w", "h" }, script = "var ctx = canvas.getContext('2d');"
+      + "var img = ctx.getImageData(0, 0, w, h);"
+      + "return new Int8Array(img.data.buffer);")
+  private static native Int8Array jsGetPixels(JSObject canvas, int w, int h);
 }

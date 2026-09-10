@@ -23,16 +23,14 @@
  */
 package org.flixelgdx.video;
 
-import com.badlogic.gdx.Gdx;
-import com.badlogic.gdx.LifecycleListener;
-import com.badlogic.gdx.graphics.Texture;
-
 import org.flixelgdx.Flixel;
 import org.flixelgdx.FlixelBasic;
 import org.flixelgdx.FlixelCamera;
-import org.flixelgdx.FlixelGame;
 import org.flixelgdx.graphics.FlixelBatch;
+import org.flixelgdx.graphics.FlixelImage;
+import org.flixelgdx.graphics.FlixelTexture;
 import org.flixelgdx.util.signal.FlixelSignal;
+import org.flixelgdx.util.signal.FlixelSignal.SignalHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -44,14 +42,14 @@ import org.jetbrains.annotations.Nullable;
  * {@link org.flixelgdx.FlixelState FlixelState}. Draw order follows state member order:
  * a sprite added after the video renders on top of it, exactly as with two sprites.
  *
- * <p>Create instances through {@link FlixelVideos#create(String)}, which picks the
- * platform backend registered by your launcher:
+ * <p>Create instances through {@link FlixelVideos#create(org.flixelgdx.file.FlixelFile)}, which
+ * picks the platform backend registered by your launcher:
  *
  * <pre>{@code
- * FlixelVideo cutscene = FlixelVideos.create("videos/intro.mp4");
+ * FlixelVideo cutscene = FlixelVideos.create(Flixel.files.internal("videos/intro.mp4"));
  * cutscene.setSize(Flixel.game.getWidth(), Flixel.game.getHeight());
  * cutscene.setLooped(false);
- * cutscene.onComplete.add(() -> Flixel.switchState(new MenuState()));
+ * cutscene.onComplete.add(data -> Flixel.switchState(MenuState::new));
  * add(cutscene);
  * cutscene.play();
  * }</pre>
@@ -60,9 +58,16 @@ import org.jetbrains.annotations.Nullable;
  * {@link org.flixelgdx.audio.FlixelSound FlixelSound}. Call {@link #destroy()} when the
  * video leaves the game for good to release the decoder and the frame texture.
  *
- * <p>The video pauses automatically when the OS suspends the application (the same
- * condition that pauses sounds) if {@link FlixelGame#autoPause} is
- * {@code true}, and resumes when the application comes back to the foreground.
+ * <p>The frame image is the same on every platform: each backend decodes into a reusable
+ * {@link FlixelImage} of RGBA pixels and hands it to {@link #updateFrame(FlixelImage)}, which keeps
+ * a single {@link FlixelTexture} alive and scrubs its pixels in place. Because that "reuse one
+ * texture, rewrite its pixels" step lives here in core and rides on the portable graphics
+ * interface, every backend gets it without repeating the GPU plumbing.
+ *
+ * <p>The video pauses automatically when the window loses focus or the application is sent to the
+ * background (the same {@link Flixel.Signals#windowUnfocused} and {@link Flixel.Signals#windowFocused}
+ * events the framework pauses audio on) while {@link Flixel#autoPause} is {@code true}, and resumes
+ * when focus returns.
  *
  * <p>Subclassing this type is only needed for a custom media pipeline. Platform backends
  * implement the {@code protected abstract} template methods ({@link #playMedia()},
@@ -92,7 +97,32 @@ public abstract class FlixelVideo extends FlixelBasic {
   @NotNull
   private FlixelVideoQuality quality = FlixelVideoQuality.FULL;
 
-  /** World X position of the bottom-left corner in view coordinates. */
+  /** The reusable GPU texture the latest frame is scrubbed into; {@code null} before the first frame. */
+  @Nullable
+  private FlixelTexture texture;
+
+  /**
+   * Pauses the video when the window loses focus (or the app is backgrounded), so it lines up with
+   * the framework pausing audio. Kept as a field so it can be unregistered in {@link #destroy()}.
+   */
+  private final SignalHandler<Void> onWindowUnfocused = data -> {
+    // These fields (autoPaused) are declared lower in the class, so qualify with this to satisfy
+    // the forward-reference rule in a field initializer.
+    if (Flixel.autoPause && !this.autoPaused && isMediaPlaying()) {
+      pauseMedia();
+      this.autoPaused = true;
+    }
+  };
+
+  /** Resumes the video when focus returns, undoing {@link #onWindowUnfocused}. */
+  private final SignalHandler<Void> onWindowFocused = data -> {
+    if (this.autoPaused) {
+      this.autoPaused = false;
+      resumeMedia();
+    }
+  };
+
+  /** World X position of the top-left corner in view coordinates. */
   public float x;
 
   /** World Y position of the video in view coordinates. */
@@ -111,36 +141,8 @@ public abstract class FlixelVideo extends FlixelBasic {
   public float scrollY = 1f;
 
   /**
-   * Registered with {@link Gdx#app} so the video pauses and resumes on mobile and web when the
-   * application moves to and from the background. Stored so it can be removed in
-   * {@link #destroy()}.
-   */
-  private final LifecycleListener lifecycleListener = new LifecycleListener() {
-    @Override
-    public void pause() {
-      if (Flixel.game == null || !Flixel.game.autoPause || autoPaused || !isMediaPlaying()) {
-        return;
-      }
-      pauseMedia();
-      autoPaused = true;
-    }
-
-    @Override
-    public void resume() {
-      if (!autoPaused) {
-        return;
-      }
-      autoPaused = false;
-      resumeMedia();
-    }
-
-    @Override
-    public void dispose() {}
-  };
-
-  /**
-   * Set when this video was paused automatically (by the lifecycle listener or a platform-specific
-   * focus hook) so it can be correctly resumed when the application returns to the foreground.
+   * Set when this video was paused automatically (by the focus hook or a platform-specific
+   * focus event) so it can be correctly resumed when the application returns to the foreground.
    */
   protected boolean autoPaused;
 
@@ -149,6 +151,9 @@ public abstract class FlixelVideo extends FlixelBasic {
 
   /** Guards {@link #onComplete} so the end of a video is only announced once. */
   private boolean completed;
+
+  /** Set once the first frame has been uploaded, so drawing waits for real pixels. */
+  private boolean frameReady;
 
   /** Starts the underlying media player. */
   protected abstract void playMedia();
@@ -268,18 +273,11 @@ public abstract class FlixelVideo extends FlixelBasic {
   protected abstract int getMediaVideoHeight();
 
   /**
-   * Returns the texture holding the most recent decoded frame.
+   * Per-frame pump; advances player state and pushes the newest decoded frame.
    *
-   * @return The frame texture, or {@code null} before the first frame arrives.
-   */
-  @Nullable
-  protected abstract Texture getMediaTexture();
-
-  /**
-   * Per-frame pump; uploads decoded frames and applies deferred state changes.
-   *
-   * <p>Must be called on the render thread. {@link #update(float)} calls this
-   * automatically after the standard lifecycle checks.
+   * <p>Must be called on the render thread. {@link #update(float)} calls this automatically after
+   * the standard lifecycle checks. When a new frame has been decoded, the backend copies its RGBA
+   * pixels into a reusable {@link FlixelImage} and hands it to {@link #updateFrame(FlixelImage)}.
    *
    * @param elapsed Seconds since the last frame.
    */
@@ -290,7 +288,8 @@ public abstract class FlixelVideo extends FlixelBasic {
 
   protected FlixelVideo() {
     super();
-    Gdx.app.addLifecycleListener(lifecycleListener);
+    Flixel.Signals.windowUnfocused.add(onWindowUnfocused);
+    Flixel.Signals.windowFocused.add(onWindowFocused);
   }
 
   /**
@@ -408,14 +407,11 @@ public abstract class FlixelVideo extends FlixelBasic {
 
   @Override
   public void draw(@NotNull FlixelBatch batch) {
-    if (!visible || !exists) {
+    if (!visible || !exists || !frameReady) {
       return;
     }
-    if (!isOnDrawCamera()) {
-      return;
-    }
-    Texture texture = getMediaTexture();
-    if (texture == null) {
+    FlixelTexture tex = texture;
+    if (tex == null || !isOnDrawCamera()) {
       return;
     }
 
@@ -434,20 +430,31 @@ public abstract class FlixelVideo extends FlixelBasic {
       return;
     }
 
-    // Source rectangle crop: decoders often pad the texture below the visible picture
-    // (codec row alignment), so only the top-left videoW x videoH region is drawn.
-    batch.draw(texture, wx, wy, drawW, drawH, 0, 0, videoW, videoH, false, false);
+    // The picture sits in the top-left of the texture; decoders often make the texture a little
+    // larger than the visible frame (codec row alignment), so crop the sampled region to the real
+    // picture size instead of stretching the padding across the quad.
+    int texW = tex.getWidth();
+    int texH = tex.getHeight();
+    float u2 = texW > 0 ? Math.min(1f, videoW / (float) texW) : 1f;
+    float v2 = texH > 0 ? Math.min(1f, videoH / (float) texH) : 1f;
+    batch.draw(tex, wx, wy, drawW, drawH, 0f, 0f, u2, v2);
   }
 
   @Override
   public void destroy() {
     super.destroy();
-    Gdx.app.removeLifecycleListener(lifecycleListener);
+    Flixel.Signals.windowUnfocused.remove(onWindowUnfocused);
+    Flixel.Signals.windowFocused.remove(onWindowFocused);
     onPlay.clear();
     onPause.clear();
     onResume.clear();
     onComplete.clear();
     disposeMedia();
+    if (texture != null) {
+      texture.destroy();
+      texture = null;
+    }
+    frameReady = false;
     quality = FlixelVideoQuality.FULL;
     x = 0f;
     y = 0f;
@@ -461,17 +468,48 @@ public abstract class FlixelVideo extends FlixelBasic {
   }
 
   /**
+   * Uploads the newest decoded frame into the reusable frame texture.
+   *
+   * <p>Backends call this from {@link #updateMedia(float)} on the render thread whenever a fresh
+   * frame is ready. The first call, and any call whose pixel size differs from the current texture,
+   * creates the texture; every other call scrubs the existing texture's pixels in place. This is the
+   * "reuse one texture, rewrite its pixels" path, kept here so every backend shares it: a backend
+   * only has to decode RGBA into a {@link FlixelImage}, never manage a GPU texture itself.
+   *
+   * @param image The freshly decoded RGBA pixels; owned by the backend and reused between frames.
+   */
+  protected final void updateFrame(@NotNull FlixelImage image) {
+    int w = image.getWidth();
+    int h = image.getHeight();
+    if (w <= 0 || h <= 0) {
+      return;
+    }
+    FlixelTexture current = texture;
+    if (current == null || current.getWidth() != w || current.getHeight() != h) {
+      if (current != null) {
+        current.destroy();
+      }
+      current = Flixel.graphics.createTexture(image);
+      current.setSmooth(true);
+      texture = current;
+    } else {
+      current.update(0, 0, image);
+    }
+    frameReady = true;
+  }
+
+  /**
    * Returns the texture that holds the current video frame.
    *
    * <p>Useful when you want to feed the video into your own drawing code instead of
-   * relying on the default draw. The backend owns this texture; do not dispose it
+   * relying on the default draw. The video owns this texture; do not destroy it
    * yourself.
    *
    * @return The frame texture, or {@code null} before the first frame arrives.
    */
   @Nullable
-  public final Texture getTexture() {
-    return getMediaTexture();
+  public final FlixelTexture getTexture() {
+    return frameReady ? texture : null;
   }
 
   /**

@@ -6,9 +6,9 @@ val vlcVersionString = libs.versions.vlc.get()
 
 val vlcDownloads = listOf(
   mapOf(
-    "name" to "vlc-${vlcVersionString}-win64.zip",
-    "url" to "https://download.videolan.org/pub/videolan/vlc/${vlcVersionString}/win64/vlc-${vlcVersionString}-win64.zip",
-    "sha256" to "992d19dbd0b8a7cde9167d2f7780b1ef6f92acc8a71acfa736101a21f35181e1"
+    "name" to "vlc-${vlcVersionString}-winarm64.zip",
+    "url" to "https://download.videolan.org/pub/videolan/vlc/${vlcVersionString}/winarm64/vlc-${vlcVersionString}-winarm64.zip",
+    "sha256" to "9c0917dc521ffc8ce30e70bca7f6c9dc8fec80909d763e75cd976351dee8db0b"
   )
 )
 
@@ -23,9 +23,9 @@ val vlcNativesDir = layout.buildDirectory.dir("vlc-natives")
 if ((findProperty("packageVlcNatives") ?: "false") == "true") {
   val downloadVlcNatives = tasks.register<DownloadVlcNativesTask>("downloadVlcNatives") {
     group = "flixelgdx"
-    description = "Downloads libvlc $vlcVersionString Windows natives for JAR packaging."
+    description = "Downloads libvlc $vlcVersionString Windows ARM64 natives for JAR packaging."
     vlcVersion.set(vlcVersionString)
-    platformDir.set("windows-amd64")
+    platformDir.set("windows-aarch64")
     downloadSpecs.set(vlcDownloads)
     pluginBlocklist.set(vlcPluginBlocklist)
     downloadCacheDir.set(vlcDownloadDir)

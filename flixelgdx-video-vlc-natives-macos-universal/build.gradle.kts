@@ -25,6 +25,7 @@ if ((findProperty("packageVlcNatives") ?: "false") == "true") {
     group = "flixelgdx"
     description = "Downloads libvlc $vlcVersionString macOS natives for JAR packaging."
     vlcVersion.set(vlcVersionString)
+    platformDir.set("macos-universal")
     downloadSpecs.set(vlcDownloads)
     pluginBlocklist.set(vlcPluginBlocklist)
     downloadCacheDir.set(vlcDownloadDir)

@@ -40,6 +40,7 @@ if ((findProperty("packageVlcNatives") ?: "false") == "true") {
     group = "flixelgdx"
     description = "Downloads libvlc $vlcVersionString Linux natives for JAR packaging."
     vlcVersion.set(vlcVersionString)
+    platformDir.set("linux-amd64")
     downloadSpecs.set(vlcDownloads)
     pluginBlocklist.set(vlcPluginBlocklist)
     downloadCacheDir.set(vlcDownloadDir)

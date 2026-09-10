@@ -46,7 +46,7 @@ import java.nio.file.Files;
  *
  * <pre>{@code
  * public static void main(String[] args) {
- *   FlixelVlcVideoHandler.install();
+ *   FlixelDesktopVideoHandler.install();
  *   FlixelDesktopLauncher.launch(new MyGame());
  * }
  * }</pre>
@@ -63,7 +63,7 @@ import java.nio.file.Files;
  * <p>Automatic pause and resume on focus changes is handled by {@link FlixelVideo} itself through
  * the framework's window focus signals, so this factory only has to register itself.
  */
-public final class FlixelVlcVideoHandler implements FlixelVideoFactory {
+public final class FlixelDesktopVideoHandler implements FlixelVideoFactory {
 
   private static Pointer instance;
 
@@ -75,7 +75,7 @@ public final class FlixelVlcVideoHandler implements FlixelVideoFactory {
    * multiple times.
    */
   public static void install() {
-    FlixelVideos.setBackendFactory(new FlixelVlcVideoHandler());
+    FlixelVideos.setBackendFactory(new FlixelDesktopVideoHandler());
   }
 
   /**

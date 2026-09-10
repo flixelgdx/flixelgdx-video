@@ -26,6 +26,8 @@ package org.flixelgdx.video;
 import org.flixelgdx.Flixel;
 import org.flixelgdx.FlixelBasic;
 import org.flixelgdx.FlixelCamera;
+import org.flixelgdx.audio.FlixelSound;
+import org.flixelgdx.file.FlixelFile;
 import org.flixelgdx.graphics.FlixelBatch;
 import org.flixelgdx.graphics.FlixelGraphicsManager;
 import org.flixelgdx.graphics.FlixelImage;
@@ -43,21 +45,21 @@ import org.jetbrains.annotations.Nullable;
  * {@link org.flixelgdx.FlixelState FlixelState}. Draw order follows state member order:
  * a sprite added after the video renders on top of it, exactly as with two sprites.
  *
- * <p>Create instances through {@link FlixelVideos#create(org.flixelgdx.file.FlixelFile)}, which
- * picks the platform backend registered by your launcher:
+ * <p>Create instances through {@link FlixelVideos#create(FlixelFile)}, which picks the
+ * platform backend registered by your launcher:
  *
  * <pre>{@code
  * FlixelVideo cutscene = FlixelVideos.create(Flixel.files.internal("videos/intro.mp4"));
- * cutscene.setSize(Flixel.game.getWidth(), Flixel.game.getHeight());
+ * cutscene.setSize(Flixel.getDesignWidth(), Flixel.getDesignHeight());
  * cutscene.setLooped(false);
- * cutscene.onComplete.add(data -> Flixel.switchState(MenuState::new));
+ * cutscene.onComplete.add(data -> Flixel.switchState(() -> new MenuState()));
  * add(cutscene);
  * cutscene.play();
  * }</pre>
  *
  * <p>All time values are in milliseconds, matching
- * {@link org.flixelgdx.audio.FlixelSound FlixelSound}. Call {@link #destroy()} when the
- * video leaves the game for good to release the decoder and the frame texture.
+ * {@link FlixelSound}. Call {@link #destroy()} when the video leaves the game for good to
+ * release the decoder and the frame texture.
  *
  * <p>The frame image is the same on every platform: each backend decodes into a reusable
  * {@link FlixelImage} of RGBA pixels and hands it to {@link #updateFrame(FlixelImage)}, which keeps

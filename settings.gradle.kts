@@ -27,12 +27,8 @@ dependencyResolutionManagement {
   repositories {
     mavenCentral()
     gradlePluginPortal()
-    maven("https://s01.oss.sonatype.org")
-    // mavenLocal() and jitpack.io let the video modules resolve the FlixelGDX framework
-    // from a local publishToMavenLocal build or a GitHub branch/commit when a matching
-    // release is not yet on Maven Central. When the composite build below is active it takes
-    // priority over all of these. See COMPILING.md.
     mavenLocal()
+    maven("https://s01.oss.sonatype.org")
     maven("https://oss.sonatype.org/content/repositories/snapshots/")
     maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
     maven("https://jitpack.io")
@@ -50,11 +46,11 @@ if (file("../flixelgdx").isDirectory) {
 
 include(
   "flixelgdx-video-core",
+  "flixelgdx-video-desktop",
+  "flixelgdx-video-html5",
   "flixelgdx-video-vlc-natives-windows-amd64",
   "flixelgdx-video-vlc-natives-windows-aarch64",
   "flixelgdx-video-vlc-natives-linux-amd64",
   "flixelgdx-video-vlc-natives-linux-aarch64",
-  "flixelgdx-video-vlc-natives-macos-universal",
-  "flixelgdx-video-desktop",
-  "flixelgdx-video-html5"
+  "flixelgdx-video-vlc-natives-macos-universal"
 )

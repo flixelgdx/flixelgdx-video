@@ -310,7 +310,7 @@ public class FlixelHtml5Video extends FlixelVideo {
     FlixelImage image = ensureFrameImage(width, height);
 
     // Select the pixel source for this frame. For full quality, pass the video element directly
-    // to texSubImage2D -- no canvas readback, no Java copy. For scaled quality, draw to the
+    // to texSubImage2D, with no canvas readback and no Java copy. For scaled quality, draw to the
     // offscreen canvas at the target size first, then pass that canvas.
     if (mediaQuality == FlixelVideoQuality.FULL) {
       pendingJsSource = element;
@@ -371,43 +371,45 @@ public class FlixelHtml5Video extends FlixelVideo {
     return Math.max(2, Math.round(sourceSize * mediaQuality.getScale()));
   }
 
-  @JSBody(params = { "url" }, script = "var v = document.createElement('video');"
-      + "v.src = url;"
-      + "v.crossOrigin = 'anonymous';"
-      + "v.preload = 'auto';"
-      + "v.playsInline = true;"
-      + "v.flixelVolume = 1;"
-      + "v.flixelLoop = false;"
-      + "v.flxLastTime = -1.0;"
-      + "v.addEventListener('loadedmetadata', function() {"
-      + "  v.volume = v.flixelVolume;"
-      + "  v.loop = v.flixelLoop;"
-      + "});"
-      + "v.load();"
-      + "return v;")
+  @JSBody(params = { "url" }, script = """
+      const v = document.createElement('video');
+      v.src = url;
+      v.crossOrigin = 'anonymous';
+      v.preload = 'auto';
+      v.playsInline = true;
+      v.flixelVolume = 1;
+      v.flixelLoop = false;
+      v.flxLastTime = -1.0;
+      v.addEventListener('loadedmetadata', function() {
+        v.volume = v.flixelVolume;
+        v.loop = v.flixelLoop;
+      });
+      v.load();
+      return v;""")
   private static native JSObject jsCreateVideo(String url);
 
   /**
    * Starts playback. If the browser's autoplay policy rejects the call (no user
    * gesture yet), one-shot listeners retry on the next pointer or key event.
    */
-  @JSBody(params = { "v" }, script = "v.volume = v.flixelVolume;"
-      + "var p = v.play();"
-      + "if (p && p.catch) {"
-      + "  p.catch(function() {"
-      + "    if (v.flixelResumeArmed) return;"
-      + "    v.flixelResumeArmed = true;"
-      + "    var resume = function() {"
-      + "      v.flixelResumeArmed = false;"
-      + "      document.removeEventListener('pointerdown', resume);"
-      + "      document.removeEventListener('keydown', resume);"
-      + "      v.volume = v.flixelVolume;"
-      + "      v.play();"
-      + "    };"
-      + "    document.addEventListener('pointerdown', resume);"
-      + "    document.addEventListener('keydown', resume);"
-      + "  });"
-      + "}")
+  @JSBody(params = { "v" }, script = """
+      v.volume = v.flixelVolume;
+      var p = v.play();
+      if (p && p.catch) {
+        p.catch(function() {
+          if (v.flixelResumeArmed) return;
+          v.flixelResumeArmed = true;
+          var resume = function() {
+            v.flixelResumeArmed = false;
+            document.removeEventListener('pointerdown', resume);
+            document.removeEventListener('keydown', resume);
+            v.volume = v.flixelVolume;
+            v.play();
+          };
+          document.addEventListener('pointerdown', resume);
+          document.addEventListener('keydown', resume);
+        });
+      }""")
   private static native void jsPlay(JSObject v);
 
   @JSBody(params = { "v" }, script = "v.pause();")

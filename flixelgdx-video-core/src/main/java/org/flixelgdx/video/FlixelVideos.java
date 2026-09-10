@@ -23,6 +23,7 @@
  */
 package org.flixelgdx.video;
 
+import org.flixelgdx.Flixel;
 import org.flixelgdx.file.FlixelFile;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -64,7 +65,7 @@ public final class FlixelVideos {
   /**
    * Creates a new video for the given file using the current platform backend.
    *
-   * <p>Obtain the {@link FlixelFile} from {@link org.flixelgdx.Flixel#files}: for example
+   * <p>Obtain the {@link FlixelFile} from {@link Flixel#files}: for example
    * {@code Flixel.files.internal("videos/intro.mp4")} for a bundled asset, or
    * {@code Flixel.files.absolute(path)} for a file elsewhere on disk.
    *

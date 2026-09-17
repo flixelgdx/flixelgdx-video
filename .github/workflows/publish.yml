@@ -67,9 +67,7 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_PASSWORD }}
         run: |
-          VERSION=${GITHUB_REF_NAME#v}
           ./gradlew publishAllPublicationsToMavenCentralRepository \
-            -PprojectVersion=$VERSION \
             -PpackageVlcNatives=true \
             --no-daemon \
             --warning-mode all

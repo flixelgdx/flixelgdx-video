@@ -131,20 +131,37 @@ final class LibVlc {
    * libvlc_video_lock_cb: libvlc asks where to decode the next frame into.
    *
    * <p>The implementation writes the address of a pre-allocated pixel buffer into
-   * {@code planes[0]} and returns an opaque picture handle (unused here, so {@code null}).
+   * {@code planes[0]} and returns an opaque picture handle (unused here, so {@code 0}).
+   *
+   * <p>The pointer arguments and the return are declared as {@code long} native addresses rather
+   * than {@link Pointer} on purpose. This callback fires once for every decoded frame, and JNA's
+   * direct-callback bridge allocates a fresh {@link Pointer} for each {@link Pointer}-typed
+   * parameter on every invocation; a {@code long} is passed straight through with no allocation.
+   * Keeping the per-frame callbacks allocation-free is what stops the decode path from churning
+   * garbage. This assumes 64-bit native pointers, which every shipped libvlc natives target is.
    */
   interface LockCallback extends Callback {
-    Pointer invoke(Pointer opaque, Pointer planes);
+    long invoke(long opaque, long planes);
   }
 
-  /** libvlc_video_unlock_cb: libvlc finished writing the frame started in lock. */
+  /**
+   * libvlc_video_unlock_cb: libvlc finished writing the frame started in lock.
+   *
+   * <p>Declared with {@code long} addresses for the same per-frame, allocation-free reason as
+   * {@link LockCallback}.
+   */
   interface UnlockCallback extends Callback {
-    void invoke(Pointer opaque, Pointer picture, Pointer planes);
+    void invoke(long opaque, long picture, long planes);
   }
 
-  /** libvlc_video_display_cb: the frame written in lock/unlock is ready to show. */
+  /**
+   * libvlc_video_display_cb: the frame written in lock/unlock is ready to show.
+   *
+   * <p>Declared with {@code long} addresses for the same per-frame, allocation-free reason as
+   * {@link LockCallback}.
+   */
   interface DisplayCallback extends Callback {
-    void invoke(Pointer opaque, Pointer picture);
+    void invoke(long opaque, long picture);
   }
 
   /**

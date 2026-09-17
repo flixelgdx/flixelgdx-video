@@ -51,6 +51,12 @@ import org.teavm.jso.webgl.WebGLRenderingContext;
  * first drawn onto a reused offscreen canvas at the target size, and that canvas is passed to
  * {@code texSubImage2D} instead. Both paths avoid any {@code getImageData} or {@code byte[]} copy.
  *
+ * <p>A frame is only re-uploaded when the browser actually presents a new one. Where
+ * {@code requestVideoFrameCallback} is available it drives that signal; otherwise a
+ * {@code currentTime} poll is used. This matters most at full quality, where every upload moves a
+ * full-resolution frame to the GPU: uploading only genuinely new frames keeps a single video cheap
+ * and lets two videos play at once without redundant per-tick uploads piling up.
+ *
  * <p>Autoplay policies may block {@link #playMedia()} with sound before the first user
  * gesture; in that case playback resumes automatically on the next pointer or key
  * event (the rejection handler in {@link #jsPlay} registers one-shot listeners).
@@ -384,6 +390,20 @@ public class FlixelHtml5Video extends FlixelVideo {
         v.volume = v.flixelVolume;
         v.loop = v.flixelLoop;
       });
+      // Prefer requestVideoFrameCallback: it fires exactly once per frame the browser actually
+      // presents, so the upload path re-reads the frame only when there is a genuinely new one.
+      // Polling currentTime (the fallback) changes on essentially every render tick even when the
+      // same frame is on screen, which forces a redundant full-resolution GPU upload every tick.
+      // That redundant upload is what makes full-quality playback (and two videos at once) expensive.
+      v.flxFrameDirty = true;
+      v.flxUseRvfc = (typeof v.requestVideoFrameCallback === 'function');
+      if (v.flxUseRvfc) {
+        const onFrame = function() {
+          v.flxFrameDirty = true;
+          v.requestVideoFrameCallback(onFrame);
+        };
+        v.requestVideoFrameCallback(onFrame);
+      }
       v.load();
       return v;""")
   private static native JSObject jsCreateVideo(String url);
@@ -445,11 +465,19 @@ public class FlixelHtml5Video extends FlixelVideo {
   /**
    * Returns whether the decoder has advanced to a new frame since the last call.
    *
-   * <p>{@code currentTime} advances exactly once per decoded frame, giving per-frame
-   * resolution without any event listener. The {@code timeupdate} event fires at most
-   * four times per second per spec, which is too coarse for smooth video playback.
+   * <p>When {@code requestVideoFrameCallback} is available, this simply consumes the flag that
+   * callback sets, so it returns {@code true} exactly once per presented frame and the caller
+   * uploads each frame only once.
+   *
+   * <p>The fallback path watches {@code currentTime}. That value changes on essentially every
+   * render tick during playback (it tracks the continuous playback clock, not frame boundaries),
+   * so the fallback can report a "new frame" more often than the video truly advances. The
+   * {@code timeupdate} event is not used because it fires at most four times per second per spec,
+   * which is too coarse for smooth playback.
    */
-  @JSBody(params = { "v" }, script = "var t = v.currentTime;"
+  @JSBody(params = { "v" }, script = "if (v.flxUseRvfc) {"
+      + "if (v.flxFrameDirty) { v.flxFrameDirty = false; return true; } return false; }"
+      + "var t = v.currentTime;"
       + "if (t !== v.flxLastTime) { v.flxLastTime = t; return true; }"
       + "return false;")
   private static native boolean jsConsumeFrameDirty(JSObject v);

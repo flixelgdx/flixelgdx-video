@@ -67,6 +67,13 @@ public class FlixelVlcVideo extends FlixelVideo {
   /** Direct views over {@link #frameBuffers}, reused for the per-frame copy. */
   private final ByteBuffer[] frameViews = new ByteBuffer[2];
 
+  /**
+   * A repointable view used by the lock callback to write into libvlc's planes array without
+   * allocating a {@link Pointer} on every decoded frame. Only ever touched from the libvlc decode
+   * thread inside {@link #onLock(long, long)}, under {@link #bufferLock}.
+   */
+  private final MovablePointer planesPointer = new MovablePointer();
+
   /** Reused out-parameters for libvlc_video_get_size (avoids per-frame allocation). */
   private final IntByReference sizeWidthRef = new IntByReference();
   private final IntByReference sizeHeightRef = new IntByReference();
@@ -543,17 +550,24 @@ public class FlixelVlcVideo extends FlixelVideo {
     return 1;
   }
 
-  /** libvlc asks for the buffer to decode the next frame into; runs on a libvlc thread. */
-  private Pointer onLock(Pointer opaque, Pointer planes) {
+  /**
+   * libvlc asks for the buffer to decode the next frame into; runs on a libvlc thread.
+   *
+   * <p>The arguments are raw native addresses (see {@link LibVlc.LockCallback}). The reusable
+   * {@link #planesPointer} is repointed at libvlc's planes array so the buffer address can be
+   * written without allocating a {@link Pointer} on this per-frame path.
+   */
+  private long onLock(long opaque, long planes) {
     synchronized (bufferLock) {
       Memory buffer = frameBuffers[writeIndex];
-      planes.setPointer(0, buffer);
+      planesPointer.pointTo(planes);
+      planesPointer.setPointer(0, buffer);
     }
-    return null;
+    return 0L;
   }
 
   /** A decoded frame is ready to be shown; runs on a libvlc thread. */
-  private void onDisplay(Pointer opaque, Pointer picture) {
+  private void onDisplay(long opaque, long picture) {
     synchronized (bufferLock) {
       readyIndex = writeIndex;
       writeIndex ^= 1;
@@ -569,6 +583,30 @@ public class FlixelVlcVideo extends FlixelVideo {
     } else if (type == LibVlc.EVENT_ENCOUNTERED_ERROR) {
       playbackError = true;
       endReached = true;
+    }
+  }
+
+  /**
+   * A {@link Pointer} whose target address can be moved without allocating a new instance.
+   *
+   * <p>The lock callback needs a {@link Pointer} to write the decode buffer's address into libvlc's
+   * planes array, but it runs once per decoded frame, so allocating a wrapper each time would churn
+   * garbage. Repointing a single reused instance keeps that path allocation-free. Only the address
+   * changes; the wrapper never owns or frees native memory.
+   */
+  private static final class MovablePointer extends Pointer {
+
+    private MovablePointer() {
+      super(0L);
+    }
+
+    /**
+     * Aims this pointer at the given native address.
+     *
+     * @param address The native address this pointer should refer to.
+     */
+    private void pointTo(long address) {
+      peer = address;
     }
   }
 }

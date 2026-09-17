@@ -1,8 +1,3 @@
-// Desktop backend for the FlixelGDX video extension. Bridges libvlc into the framework through
-// JNA-registered JNI bindings. The libvlc native libraries are provided at runtime by the
-// flixelgdx-video-vlc-natives modules, which FlixelVlcDiscovery extracts from the classpath on
-// first use.
-
 plugins {
   id("flixelgdx.java-library")
 }

@@ -1,5 +1,5 @@
 [versions]
-flixelgdx = "0.6.0"
+flixelgdx = "0.6.2"
 graalvm = "24.2.0"
 jetbrainsAnnotations = "26.1.0"
 jna = "5.17.0"

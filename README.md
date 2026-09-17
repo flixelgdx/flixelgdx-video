@@ -6,25 +6,19 @@
 [![Maven Central](https://img.shields.io/maven-central/v/org.flixelgdx/flixelgdx-video-core)](https://central.sonatype.com/artifact/org.flixelgdx/flixelgdx-video-core)
 [![JitPack](https://jitpack.io/v/flixelgdx/flixelgdx-video.svg)](https://jitpack.io/#flixelgdx/flixelgdx-video)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Website](https://img.shields.io/badge/website-flixelgdx.org-blue)](https://flixelgdx.org)
+[![FlixelGDX 0.6.2](https://img.shields.io/badge/FlixelGDX-0.6.2-red)](https://kotlinlang.org/)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-orange)](https://adoptium.net/temurin/releases?version=17&os=any&arch=any)
 [![Platforms](https://img.shields.io/badge/platforms-Desktop%20%7C%20Web-brightgreen)](https://flixelgdx.org)
 
 </div>
 
+FlixelGDX Video is a simplistic, robust and cross-platform video extension for the Java game framework [FlixelGDX](https://github.com/flixelgdx/flixelgdx).
+It's the perfect tool to seamlessly play video files directly inside of you game for things like cutscenes, backgrounds animations, and so much more.
+
 > [!TIP]
 > This README is a quick-start. For the full guide (formats, quality options, streaming,
 > platform quirks, and the complete API), read the official documentation at
 > **[flixelgdx.org/docs/videos](https://flixelgdx.org/docs/videos)**.
-
-**FlixelGDX Video** is the optional video playback extension for
-[FlixelGDX](https://github.com/flixelgdx/flixelgdx). It lets you drop a video (a cutscene, an
-intro, a background loop) straight into a `FlixelState` and treat it like any other game object:
-it has the normal lifecycle, follows the state's draw order, and pauses and resumes with the game.
-
-This is a separate repository so games only pull in the decoder they actually ship, and so the
-framework itself stays lean. Nothing in the core framework depends on it; the video modules depend
-on the framework, never the other way around.
 
 ---
 
@@ -33,12 +27,12 @@ on the framework, never the other way around.
 The extension is split into a platform-neutral API plus one backend per platform, so your build
 only carries the code and natives for the platforms you target.
 
-| Module | Purpose |
-|--------|---------|
-| **`flixelgdx-video-core`** | The platform-neutral API (`FlixelVideo`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`). Holds the shared "reuse one texture, rewrite its pixels" upload path, so every backend only has to decode a frame into a `FlixelImage`. Depends only on `flixelgdx-core`. |
-| **`flixelgdx-video-desktop`** | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA. |
-| **`flixelgdx-video-html5`** | Web backend built on a hidden HTML video element the browser decodes; each frame is read back and handed to core. |
-| **`flixelgdx-video-vlc-natives-*`** | Packaging-only modules that bundle the stripped libvlc natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Pulled in automatically by the desktop backend. |
+| Module                              | Purpose                                                                                                                                                                                                                                                                         |
+|-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **`flixelgdx-video-core`**          | The platform-neutral API (`FlixelVideo`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`). Holds the shared "reuse one texture, rewrite its pixels" upload path, so every backend only has to decode a frame into a `FlixelImage`. Depends only on `flixelgdx-core`. |
+| **`flixelgdx-video-desktop`**       | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA.                                                                                                                                                                             |
+| **`flixelgdx-video-html5`**         | Web backend built on a hidden HTML video element the browser decodes; each frame is read back and handed to core.                                                                                                                                                               |
+| **`flixelgdx-video-vlc-natives-*`** | Packaging-only modules that bundle the stripped libvlc natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Pulled in automatically by the desktop backend.                                                                                                  |
 
 ---
 
@@ -76,26 +70,20 @@ Each backend depends on `flixelgdx-video-core`, so pulling in a backend also bri
 
 ---
 
-## Usage
+## How do I use it?
 
-There are two steps: install the platform backend once in your launcher, then create and play
-videos anywhere in your game.
-
-### 1. Install the backend in your launcher
-
-Each platform ships an installer you call once, before the game starts. This is the only
-platform-specific code you write.
+Configuring the video extension only takes a single line of code you add in your platform module.
 
 **Desktop:**
 
 ```java
 public static void main(String[] args) {
-  FlixelVlcVideoHandler.install();
+  FlixelDesktopVideoHandler.install();
   FlixelDesktopLauncher.launch(new MyGame());
 }
 ```
 
-**Web:**
+**HTML5:**
 
 ```java
 public static void main(String[] args) {
@@ -104,37 +92,31 @@ public static void main(String[] args) {
 }
 ```
 
-### 2. Create and play a video
-
-From then on, your game code is fully cross-platform. `FlixelVideos.create(...)` takes a
-`FlixelFile` from `Flixel.files` (the same file seam the rest of the framework loads assets
-through) and uses whichever backend the launcher installed:
+After that, you can immediately start using cross-platform videos in your game. To create a video, you simply call
+`FlixelVideos.create(...)`, pass a `FlixelFile` into it, configure it and add it to your state.
 
 ```java
-FlixelVideo cutscene = FlixelVideos.create(Flixel.files.internal("videos/intro.mp4"));
-cutscene.setSize(Flixel.game.getWidth(), Flixel.game.getHeight());
-cutscene.setLooped(false);
-cutscene.onComplete.add(data -> Flixel.switchState(MenuState::new));
-add(cutscene);
-cutscene.play();
+public class PlayState extends FlixelState {
+
+  private FlixelVideo cutscene;
+    
+  @Override
+  public void create() {
+    cutscene = FlixelVideos.create(Flixel.files.internal("videos/intro.mp4"));
+    cutscene.setSize(1280, 720);
+    cutscene.setLooped(false);
+    cutscene.onComplete.add(data -> Flixel.switchState(() -> new MenuState()));
+    add(cutscene);
+    cutscene.play();
+  }
+
+  @Override
+  public void destroy() {
+    // Destroy the video when you're done using it to release the texture and decoder.
+    cutscene.destroy();
+  }
+}
 ```
-
-Because `FlixelVideo` extends `FlixelBasic`, it obeys state draw order just like a sprite: anything
-added after it draws on top. All time values are in milliseconds. Call `destroy()` when the video
-leaves the game for good to release the decoder and its frame texture.
-
----
-
-## About the desktop natives
-
-The desktop backend needs libvlc at runtime. Released artifacts bundle a stripped set of libvlc
-natives for Windows and Linux (both x86-64 and ARM64) and macOS (universal), so most games work out
-of the box with no VLC installation required. `FlixelVlcDiscovery` picks the folder matching the
-current OS and CPU architecture. If the bundled natives are missing (for example, a JitPack build)
-or fail to load,
-`FlixelVlcDiscovery` falls back to a game-shipped `vlc/` folder or a system VLC install. If none of
-those work, videos degrade gracefully to a never-ready state and the reason is logged, instead of
-crashing the game.
 
 ---
 

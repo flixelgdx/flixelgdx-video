@@ -13,7 +13,7 @@
 </div>
 
 FlixelGDX Video is a simplistic, robust and cross-platform video extension for the Java game framework [FlixelGDX](https://github.com/flixelgdx/flixelgdx).
-It's the perfect tool to seamlessly play video files directly inside of you game for things like cutscenes, backgrounds animations, and so much more.
+It's the perfect tool to seamlessly play video files directly inside your game for things like cutscenes, backgrounds animations, and so much more.
 
 > [!TIP]
 > This README is a quick-start. For the full guide (formats, quality options, streaming,

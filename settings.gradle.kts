@@ -27,7 +27,6 @@ dependencyResolutionManagement {
   repositories {
     mavenCentral()
     gradlePluginPortal()
-    mavenLocal()
     maven("https://s01.oss.sonatype.org")
     maven("https://oss.sonatype.org/content/repositories/snapshots/")
     maven("https://s01.oss.sonatype.org/content/repositories/snapshots/")
@@ -36,13 +35,6 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "flixelgdx-video"
-
-// Build against the sibling FlixelGDX framework checkout when it is present, so a local framework
-// change is picked up without republishing. When ../flixelgdx is absent (for example on CI) the
-// framework is resolved from the repositories above instead.
-if (file("../flixelgdx").isDirectory) {
-  includeBuild("../flixelgdx")
-}
 
 include(
   "flixelgdx-video-core",

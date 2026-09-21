@@ -37,13 +37,13 @@ import org.jetbrains.annotations.Nullable;
  *
  * <pre>{@code
  * public static void main(String[] args) {
- *   FlixelVlcVideoHandler.install();
+ *   FlixelDesktopVideoHandler.install();
  *   FlixelDesktopLauncher.launch(new MyGame());
  * }
  * }</pre>
  *
  * <p>After that, creating a video anywhere in the game needs no further setup. Videos are located
- * through {@link org.flixelgdx.Flixel#files}, the same file seam the rest of the framework loads
+ * through {@link org.flixelgdx.Flixel#files Flixel.files}, the same file seam the rest of the framework loads
  * assets through:
  *
  * <pre>{@code
@@ -83,7 +83,7 @@ public final class FlixelVideos {
     if (factory == null) {
       throw new IllegalStateException(
           "No video backend factory registered. Call the platform installer first, e.g. "
-              + "FlixelVlcVideoHandler.install() in your desktop launcher or "
+              + "FlixelDesktopVideoHandler.install() in your desktop launcher or "
               + "FlixelHtml5VideoHandler.install() in your web launcher.");
     }
     return factory.createVideo(file);
@@ -92,7 +92,7 @@ public final class FlixelVideos {
   /**
    * Registers the platform video backend factory.
    *
-   * <p>Called once by the platform installer (for example {@code FlixelVlcVideoHandler.install()}
+   * <p>Called once by the platform installer (for example {@code FlixelDesktopVideoHandler.install()}
    * on desktop or {@code FlixelHtml5VideoHandler.install()} on the web) before any video is created.
    *
    * @param factory The backend factory to use (must not be {@code null}).

@@ -2,9 +2,11 @@
  * Root settings for the FlixelGDX Video multi-module build.
  *
  * <p>Declares the build-logic included build so convention plugins are available to all
- * subprojects, includes the sibling FlixelGDX framework as a composite build so the video modules
- * can resolve it from source during development, and centralizes repository declarations (including
- * where published FlixelGDX framework artifacts are resolved from).
+ * subprojects, and centralizes repository declarations, including where the published FlixelGDX
+ * framework artifacts (`org.flixelgdx:flixelgdx-core`, `flixelgdx-desktop`, `flixelgdx-html5`) are
+ * resolved from. A contributor who wants to build against a local framework checkout instead can do
+ * so without editing this file, for example by passing `--include-build ../flixelgdx` on the command
+ * line.
  */
 
 pluginManagement {

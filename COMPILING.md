@@ -67,35 +67,30 @@ flixelgdx-video-desktop -> org.flixelgdx:flixelgdx-desktop (+ flixelgdx-video-co
 flixelgdx-video-html5   -> org.flixelgdx:flixelgdx-html5   (+ flixelgdx-video-core)
 ```
 
-There are two ways for the build to resolve them.
-
-### Composite build against a sibling framework clone (recommended)
-
-`settings.gradle.kts` automatically includes a sibling framework checkout as a
-[Gradle composite build](https://docs.gradle.org/current/userguide/composite_builds.html) when one
-exists at `../flixelgdx`, right next to this repository:
-
-```
-some-folder/
-  flixelgdx/         <- the framework
-  flixelgdx-video/   <- this repository
-```
-
-With that layout, `./gradlew assemble` compiles the video modules directly against the framework
-source, and any framework change is picked up on the next build with no republishing. This is the
-path used while the framework and the extension move together. Gradle substitutes the framework
-artifacts by module coordinates, so the `flixelgdx` version number in the catalog does not need to
-match while the composite build is active.
-
-### Published or locally installed framework
-
-When `../flixelgdx` is absent (for example on CI), the framework is resolved from one of the
-repositories configured in [`settings.gradle.kts`](settings.gradle.kts) instead:
+Gradle resolves those coordinates from the repositories declared in
+[`settings.gradle.kts`](settings.gradle.kts):
 
 - **Maven Central** - the normal case once a framework release is published.
-- **Your local Maven repository** (`mavenLocal()`) - after you run `publishToMavenLocal` in a
-  framework clone whose `projectVersion` matches the `flixelgdx` version in the catalog.
-- **JitPack** - a framework build from a GitHub branch or commit.
+- **Sonatype OSS** (release and snapshot repositories) - for framework builds published ahead of a
+  Maven Central sync.
+- **JitPack** - a framework build from a GitHub branch or commit, referenced by its JitPack
+  coordinates.
+
+### Building against a local framework checkout
+
+If you are changing the framework and the extension together, you do not need to edit any file to
+build against a sibling clone. Gradle supports attaching an
+[included build](https://docs.gradle.org/current/userguide/composite_builds.html) from the command
+line:
+
+```bash
+./gradlew assemble --include-build ../flixelgdx
+```
+
+This substitutes the framework artifacts with your local `../flixelgdx` checkout by module
+coordinates, so the `flixelgdx` version number in the catalog does not need to match while the flag
+is present. Any framework change is picked up on the next build with no republishing. Add the flag to
+whichever Gradle command you are running (`build`, `test`, an IDE's Gradle sync arguments, and so on).
 
 ---
 
@@ -171,11 +166,11 @@ every change is picked up on the next build with no republishing.
 > regardless of the number you write.
 
 > [!TIP]
-> If you are also changing the framework, keep it checked out at `../flixelgdx` next to this
-> repository so the extension composites it automatically (see
-> [above](#composite-build-against-a-sibling-framework-clone-recommended)). If your Gradle setup
-> trips over the two nested `build-logic` builds, publish the framework to your local Maven
-> repository (`publishToMavenLocal`) and remove the `../flixelgdx` clone instead.
+> If you are also changing the framework, pass `--include-build ../flixelgdx` when you run the test
+> game (see [above](#building-against-a-local-framework-checkout)) so both the extension and the
+> framework build from source. If your Gradle setup trips over the nested `build-logic` builds, publish
+> the framework to your local Maven repository instead (`publishToMavenLocal` in the framework clone)
+> and drop the `--include-build` flag.
 
 ### Method 2: `mavenLocal()`
 
@@ -226,13 +221,15 @@ installing VLC on your machine is enough to see desktop video play.
 
 ### `Could not find org.flixelgdx:flixelgdx-core` (or `-jvm`, `-desktop`, `-html5`)
 
-- **Cause**: the framework version this extension targets is not available in any configured
-  repository, and no `../flixelgdx` composite clone is present.
-- **Fix**: clone the framework next to this repository (`../flixelgdx`) so the composite build picks
-  it up, or publish that framework version to your local Maven repository (`./gradlew
-  publishToMavenLocal` in a framework clone whose `projectVersion` matches the `flixelgdx` version in
-  `gradle/libs.versions.toml`). Remember that transitive framework modules (such as `flixelgdx-jvm`)
-  must be resolvable too, so publishing the whole framework is the safest option.
+- **Cause**: the framework version this extension targets (`flixelgdx` in
+  [`gradle/libs.versions.toml`](gradle/libs.versions.toml)) is not available in any of the
+  repositories configured in [`settings.gradle.kts`](settings.gradle.kts), and you did not attach a
+  local framework checkout.
+- **Fix**: clone the framework next to this repository (`../flixelgdx`) and build with
+  `--include-build ../flixelgdx` (see
+  [above](#building-against-a-local-framework-checkout)), so the framework builds from source instead
+  of being resolved from a repository. Remember that transitive framework modules (such as
+  `flixelgdx-jvm`) must resolve too, so including the whole framework checkout is the safest option.
 
 ### Desktop video never becomes ready
 

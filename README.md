@@ -6,7 +6,7 @@
 [![Maven Central](https://img.shields.io/maven-central/v/org.flixelgdx/flixelgdx-video-core)](https://central.sonatype.com/artifact/org.flixelgdx/flixelgdx-video-core)
 [![JitPack](https://jitpack.io/v/flixelgdx/flixelgdx-video.svg)](https://jitpack.io/#flixelgdx/flixelgdx-video)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![FlixelGDX 0.6.2](https://img.shields.io/badge/FlixelGDX-0.6.2-red)](https://kotlinlang.org/)
+[![FlixelGDX 0.6.4](https://img.shields.io/badge/FlixelGDX-0.6.4-red)](https://kotlinlang.org/)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-orange)](https://adoptium.net/temurin/releases?version=17&os=any&arch=any)
 [![Platforms](https://img.shields.io/badge/platforms-Desktop%20%7C%20Web-brightgreen)](https://flixelgdx.org)
 

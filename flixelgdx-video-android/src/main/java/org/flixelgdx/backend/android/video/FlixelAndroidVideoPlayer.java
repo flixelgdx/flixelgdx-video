@@ -71,7 +71,7 @@ import java.nio.FloatBuffer;
  * full restart otherwise, so this player does not try to recover GL resources after a context loss.
  * If the context is ever destroyed, create a new video.
  */
-public final class FlixelMediaPlayerPlayer implements FlixelVideoPlayer {
+public final class FlixelAndroidVideoPlayer implements FlixelVideoPlayer {
 
   /**
    * Full-screen quad as a triangle strip, four vertices of (x, y, s, t).
@@ -91,23 +91,27 @@ public final class FlixelMediaPlayerPlayer implements FlixelVideoPlayer {
   };
 
   private static final String VERTEX_SOURCE =
-      "attribute vec2 a_pos;\n"
-          + "attribute vec2 a_uv;\n"
-          + "uniform mat4 u_texMatrix;\n"
-          + "varying vec2 v_uv;\n"
-          + "void main() {\n"
-          + "  gl_Position = vec4(a_pos, 0.0, 1.0);\n"
-          + "  v_uv = (u_texMatrix * vec4(a_uv, 0.0, 1.0)).xy;\n"
-          + "}\n";
+    """
+      attribute vec2 a_pos;
+      attribute vec2 a_uv;
+      uniform mat4 u_texMatrix;
+      varying vec2 v_uv;
+      void main() {
+        gl_Position = vec4(a_pos, 0.0, 1.0);
+        v_uv = (u_texMatrix * vec4(a_uv, 0.0, 1.0)).xy;
+      }
+      """;
 
   private static final String FRAGMENT_SOURCE =
-      "#extension GL_OES_EGL_image_external : require\n"
-          + "precision mediump float;\n"
-          + "varying vec2 v_uv;\n"
-          + "uniform samplerExternalOES u_texture;\n"
-          + "void main() {\n"
-          + "  gl_FragColor = vec4(texture2D(u_texture, v_uv).rgb, 1.0);\n"
-          + "}\n";
+    """
+      #extension GL_OES_EGL_image_external : require
+      precision mediump float;
+      varying vec2 v_uv;
+      uniform samplerExternalOES u_texture;
+      void main() {
+        gl_FragColor = vec4(texture2D(u_texture, v_uv).rgb, 1.0);
+      }
+      """;
 
   private static final int ATTR_POS = 0;
   private static final int ATTR_UV = 1;
@@ -164,10 +168,10 @@ public final class FlixelMediaPlayerPlayer implements FlixelVideoPlayer {
   private final MediaPlayer mediaPlayer = new MediaPlayer();
 
   @Nullable
-  private AssetFileDescriptor descriptor;
+  private final String path;
 
   @Nullable
-  private String path;
+  private AssetFileDescriptor descriptor;
 
   @Nullable
   private SurfaceTexture surfaceTexture;
@@ -220,7 +224,7 @@ public final class FlixelMediaPlayerPlayer implements FlixelVideoPlayer {
    *
    * @param source The opened asset; this player closes it.
    */
-  public FlixelMediaPlayerPlayer(@NotNull AssetFileDescriptor source) {
+  public FlixelAndroidVideoPlayer(@NotNull AssetFileDescriptor source) {
     this(source, null);
   }
 
@@ -229,11 +233,11 @@ public final class FlixelMediaPlayerPlayer implements FlixelVideoPlayer {
    *
    * @param path Absolute path of the video file.
    */
-  public FlixelMediaPlayerPlayer(@NotNull String path) {
+  public FlixelAndroidVideoPlayer(@NotNull String path) {
     this(null, path);
   }
 
-  private FlixelMediaPlayerPlayer(@Nullable AssetFileDescriptor descriptor, @Nullable String path) {
+  private FlixelAndroidVideoPlayer(@Nullable AssetFileDescriptor descriptor, @Nullable String path) {
     this.descriptor = descriptor;
     this.path = path;
     mediaPlayer.setOnPreparedListener(onPrepared);

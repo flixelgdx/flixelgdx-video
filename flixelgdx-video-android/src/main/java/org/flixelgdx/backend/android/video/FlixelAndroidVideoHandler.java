@@ -42,7 +42,7 @@ import java.io.IOException;
 /**
  * Android video backend factory powered by the platform {@code MediaPlayer}.
  *
- * <p>It creates one {@link FlixelMediaPlayerPlayer} per video; {@link FlixelVideos#create(FlixelFile)}
+ * <p>It creates one {@link FlixelAndroidVideoPlayer} per video; {@link FlixelVideos#create(FlixelFile)}
  * wraps the player in a {@link FlixelVideo}. Nothing here needs a native library, because the
  * decoder ships with Android itself.
  *
@@ -124,7 +124,7 @@ public final class FlixelAndroidVideoHandler implements FlixelVideoFactory {
         Flixel.error(TAG, "Video file could not be found: " + file.getPath());
         return new FlixelUnavailableVideoPlayer();
       }
-      return new FlixelMediaPlayerPlayer(onDisk.getAbsolutePath());
+      return new FlixelAndroidVideoPlayer(onDisk.getAbsolutePath());
     }
 
     String assetPath = file.getPath();
@@ -133,7 +133,7 @@ public final class FlixelAndroidVideoHandler implements FlixelVideoFactory {
     }
     try {
       AssetFileDescriptor descriptor = context.getAssets().openFd(assetPath);
-      return new FlixelMediaPlayerPlayer(descriptor);
+      return new FlixelAndroidVideoPlayer(descriptor);
     } catch (IOException error) {
       if (!file.exists()) {
         Flixel.error(TAG, "Video file could not be found: " + file.getPath());

@@ -23,6 +23,8 @@
  */
 package org.flixelgdx.video;
 
+import org.flixelgdx.functional.FlixelDestroyable;
+import org.flixelgdx.functional.FlixelUpdatable;
 import org.flixelgdx.graphics.FlixelTexture;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -42,7 +44,7 @@ import org.jetbrains.annotations.Nullable;
  * {@link #getFrame()}. The framework batch draws it like any normal texture, so a backend is free to
  * fill it from CPU pixels (see {@link FlixelVideoCpuFrame}) or entirely on the GPU.
  */
-public interface FlixelVideoPlayer {
+public interface FlixelVideoPlayer extends FlixelUpdatable, FlixelDestroyable {
 
   /** Starts (or restarts) the underlying media player. */
   void play();

@@ -6,7 +6,7 @@
 [![Maven Central](https://img.shields.io/maven-central/v/org.flixelgdx/flixelgdx-video-core)](https://central.sonatype.com/artifact/org.flixelgdx/flixelgdx-video-core)
 [![JitPack](https://jitpack.io/v/flixelgdx/flixelgdx-video.svg)](https://jitpack.io/#flixelgdx/flixelgdx-video)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![FlixelGDX 0.6.2](https://img.shields.io/badge/FlixelGDX-0.6.2-red)](https://kotlinlang.org/)
+[![FlixelGDX 0.7.0](https://img.shields.io/badge/FlixelGDX-0.7.0-red)](https://kotlinlang.org/)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-orange)](https://adoptium.net/temurin/releases?version=17&os=any&arch=any)
 [![Platforms](https://img.shields.io/badge/platforms-Desktop%20%7C%20Web%20%7C%20Android-brightgreen)](https://flixelgdx.org)
 
@@ -27,19 +27,13 @@ It's the perfect tool to seamlessly play video files directly inside your game f
 The extension is split into a platform-neutral API plus one backend per platform, so your build
 only carries the code and natives for the platforms you target.
 
-| Module                              | Purpose                                                                                                                                                                                                                             |
-|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Module                              | Purpose                                                                                                                                                                                                                                                                                              |
+|-------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **`flixelgdx-video-core`**          | The platform-neutral API (`FlixelVideo`, `FlixelVideoPlayer`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`). `FlixelVideo` is the sprite your game uses; each backend supplies a `FlixelVideoPlayer` that decodes frames and owns the frame texture. Depends only on `flixelgdx-core`. |
-| **`flixelgdx-video-desktop`**       | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA. Frames are decoded into memory and copied into a texture.                                                                          |
-| **`flixelgdx-video-html5`**         | Web backend built on a hidden HTML video element the browser decodes. The element is uploaded straight to a WebGL texture, with no CPU readback.                                                                                       |
-| **`flixelgdx-video-android`**       | Android backend built on the platform `MediaPlayer`. Frames are decoded into a `SurfaceTexture` and drawn on the GPU into a render target, so no pixels pass through Java memory. Needs no native library.                             |
-| **`flixelgdx-video-vlc-natives-*`** | Packaging-only modules that bundle the stripped libvlc natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Pulled in automatically by the desktop backend.                                                        |
-
--------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **`flixelgdx-video-core`**          | The platform-neutral API (`FlixelVideo`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`). Holds the shared "reuse one texture, rewrite its pixels" upload path, so every backend only has to decode a frame into a `FlixelImage`. Depends only on `flixelgdx-core`. |
-| **`flixelgdx-video-desktop`**       | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA.                                                                                                                                                                             |
-| **`flixelgdx-video-html5`**         | Web backend built on a hidden HTML video element the browser decodes; each frame is read back and handed to core.                                                                                                                                                               |
-| **`flixelgdx-video-vlc-natives-*`** | Packaging-only modules that bundle the stripped libvlc natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Pulled in automatically by the desktop backend.                                                                                                  |
+| **`flixelgdx-video-desktop`**       | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA. Frames are decoded into memory and copied into a texture.                                                                                                                                        |
+| **`flixelgdx-video-html5`**         | Web backend built on a hidden HTML video element the browser decodes. The element is uploaded straight to a WebGL texture, with no CPU readback.                                                                                                                                                     |
+| **`flixelgdx-video-android`**       | Android backend built on the platform `MediaPlayer`. Frames are decoded into a `SurfaceTexture` and drawn on the GPU into a render target, so no pixels pass through Java memory. Needs no native library.                                                                                           |
+| **`flixelgdx-video-vlc-natives-*`** | Packaging-only modules that bundle the stripped libvlc natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Pulled in automatically by the desktop backend.                                                                                                                       |
 
 ---
 
@@ -166,7 +160,7 @@ public class PlayState extends FlixelState {
 ## Contributing and building
 
 - **[COMPILING.md](COMPILING.md)** - how to build and test the extension locally, including the
-  building against a local framework clone with `--include-build`.
+  building against a local framework clone with `--include-build` / `includeBuild(...)`.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - contribution guidelines (shared with the main framework).
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - the module layout and build system overview.
 

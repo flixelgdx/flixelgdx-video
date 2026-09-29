@@ -44,7 +44,7 @@ import org.teavm.jso.webgl.WebGLTexture;
  * round-trip or Java-side allocation. It still extends {@link FlixelWebGlTexture} because the
  * framework's WebGL batch only accepts that type as a drawable texture.
  */
-public final class FlixelVideoWebGlTexture extends FlixelWebGlTexture {
+public final class FlixelWebGlVideoTexture extends FlixelWebGlTexture {
 
   private final WebGLRenderingContext gl;
 
@@ -55,7 +55,7 @@ public final class FlixelVideoWebGlTexture extends FlixelWebGlTexture {
    * @param width Texture width in pixels.
    * @param height Texture height in pixels.
    */
-  public FlixelVideoWebGlTexture(@NotNull WebGLRenderingContext gl, int width, int height) {
+  public FlixelWebGlVideoTexture(@NotNull WebGLRenderingContext gl, int width, int height) {
     super(gl, width, height, false);
     this.gl = gl;
   }

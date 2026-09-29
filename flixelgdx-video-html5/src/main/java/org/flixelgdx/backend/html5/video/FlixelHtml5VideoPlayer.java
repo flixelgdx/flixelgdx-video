@@ -40,7 +40,7 @@ import org.teavm.jso.webgl.WebGLRenderingContext;
  *
  * <p>The video element is used strictly as a decoding source and is never attached to
  * the DOM, so it cannot float above or below the game canvas. This player owns one
- * {@link FlixelVideoWebGlTexture} and rewrites its pixels every time the browser decodes a new
+ * {@link FlixelWebGlVideoTexture} and rewrites its pixels every time the browser decodes a new
  * frame, so videos draw through the regular batch and keep state draw order intact (a sprite added
  * after the video renders above it). {@link FlixelVideo} wraps this player; game code does not use
  * it directly.
@@ -55,7 +55,7 @@ import org.teavm.jso.webgl.WebGLRenderingContext;
  * gesture; in that case playback resumes automatically on the next pointer or key
  * event (the rejection handler in {@link #jsPlay} registers one-shot listeners).
  */
-public final class FlixelHtml5Player implements FlixelVideoPlayer {
+public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
 
   /** The hidden video element doing the decoding. */
   private final JSObject element;
@@ -66,7 +66,7 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
 
   /** The frame texture the browser frames are uploaded into; owned by this player. */
   @Nullable
-  private FlixelVideoWebGlTexture videoTex;
+  private FlixelWebGlVideoTexture videoTex;
 
   @NotNull
   private FlixelVideoQuality mediaQuality = FlixelVideoQuality.FULL;
@@ -92,7 +92,7 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
    *
    * @param url The video URL, typically an internal asset path relative to the page.
    */
-  public FlixelHtml5Player(@NotNull String url) {
+  public FlixelHtml5VideoPlayer(@NotNull String url) {
     element = jsCreateVideo(url);
   }
 
@@ -238,7 +238,7 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
       return;
     }
 
-    FlixelVideoWebGlTexture tex = videoTex;
+    FlixelWebGlVideoTexture tex = videoTex;
     boolean sizeChanged = tex == null || width != tex.getWidth() || height != tex.getHeight();
     boolean newFrame = jsConsumeFrameDirty(element);
     if (!sizeChanged && !newFrame && !forceNextFrame) {
@@ -253,7 +253,7 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
       if (tex != null) {
         tex.destroy();
       }
-      tex = new FlixelVideoWebGlTexture(gl, width, height);
+      tex = new FlixelWebGlVideoTexture(gl, width, height);
       videoTex = tex;
       ready = false;
     }

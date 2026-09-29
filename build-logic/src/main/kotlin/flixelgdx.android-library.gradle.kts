@@ -1,0 +1,99 @@
+/**
+ * Convention for FlixelGDX Android library modules.
+ *
+ * <p>Applies {@code flixelgdx.java-base} for shared IDE and Spotless setup, then layers on:
+ * the Android library plugin, a {@code javadoc} task over the release variant, and the Vanniktech
+ * Maven publish pipeline targeting Sonatype Central Portal.
+ */
+
+import com.android.build.gradle.LibraryExtension
+
+plugins {
+  id("flixelgdx.java-base")
+  id("com.android.library")
+  id("com.vanniktech.maven.publish")
+}
+
+// Compile with a JDK 17 toolchain instead of whatever JDK runs Gradle. The Android plugin runs
+// jlink from the compiling JDK to build the Android JDK image, and some JDKs used to run Gradle
+// (such as the JetBrains Runtime bundled with IntelliJ) ship without jlink.
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(17)
+  }
+}
+
+// The android plugin does not register a javadoc task, so we add one here against the release
+// variant. AGP resolves bootClasspath and the compile configuration only after evaluation.
+afterEvaluate {
+  val android = extensions.getByType(LibraryExtension::class.java)
+  tasks.register("javadoc", Javadoc::class.java) {
+    group = "documentation"
+    description = "Generates Javadoc for the Android release variant."
+    source(android.sourceSets.getByName("main").java.srcDirs)
+    // Resolve through an artifact view so Android library dependencies (such as the framework's
+    // Android module) pick their compiled classes jar instead of an ambiguous variant.
+    val compileClasses = configurations.getByName("releaseCompileClasspath").incoming
+      .artifactView {
+        attributes {
+          attribute(Attribute.of("artifactType", String::class.java), "android-classes-jar")
+        }
+      }.files
+    classpath = compileClasses.plus(files(android.bootClasspath))
+    options.encoding = "UTF-8"
+    (options as StandardJavadocDocletOptions).apply {
+      charSet = "UTF-8"
+      docEncoding = "UTF-8"
+      memberLevel = JavadocMemberLevel.PUBLIC
+      links("https://docs.oracle.com/en/java/javase/17/docs/api/")
+      if (JavaVersion.current().isJava9Compatible) {
+        addStringOption("Xdoclint:all,-missing", "-quiet")
+        addStringOption("Werror")
+      }
+    }
+    isFailOnError = true
+  }
+}
+
+// JitPack rewrites Gradle module metadata and drops classifier compatibility data; omit .module
+// files so metadata is sourced from the POM alone.
+tasks.matching { it.name.startsWith("generateMetadataFileFor") }.configureEach {
+  enabled = false
+}
+
+mavenPublishing {
+  publishToMavenCentral()
+
+  val hasSigning = findProperty("flixel.signing.enabled")?.toString() == "true"
+    || findProperty("signing.keyId") != null
+    || findProperty("signingInMemoryKeyId") != null
+  if (hasSigning) {
+    signAllPublications()
+  }
+
+  coordinates(project.group as String, project.name, project.version as String)
+
+  pom {
+    name = rootProject.property("pomName") as String
+    description = rootProject.property("pomDescription") as String
+    url = rootProject.property("pomUrl") as String
+    licenses {
+      license {
+        name = rootProject.property("pomLicenseName") as String
+        url = rootProject.property("pomLicenseUrl") as String
+        distribution = "repo"
+      }
+    }
+    developers {
+      developer {
+        id = rootProject.property("pomDeveloperId") as String
+        name = rootProject.property("pomDeveloperName") as String
+      }
+    }
+    scm {
+      connection = rootProject.property("pomScmConnection") as String
+      developerConnection = rootProject.property("pomScmDeveloperConnection") as String
+      url = rootProject.property("pomScmUrl") as String
+    }
+  }
+}

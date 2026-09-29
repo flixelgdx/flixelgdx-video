@@ -27,11 +27,11 @@ import org.flixelgdx.file.FlixelFile;
 import org.jetbrains.annotations.NotNull;
 
 /**
- * Platform-specific factory for creating video backends.
+ * Platform-specific factory for creating video players.
  *
  * <p>One instance is registered through
  * {@link FlixelVideos#setBackendFactory(FlixelVideoFactory)} by the platform launcher (for example
- * {@code FlixelVlcVideoHandler.install()} on desktop) before any {@link FlixelVideo} is created.
+ * {@code FlixelDesktopVideoHandler.install()} on desktop) before any {@link FlixelVideo} is created.
  *
  * <p>The factory is handed a {@link FlixelFile} rather than a path string, so the same seam the
  * rest of the framework loads assets through decides where the video lives. Each backend reads
@@ -41,11 +41,15 @@ import org.jetbrains.annotations.NotNull;
 public interface FlixelVideoFactory {
 
   /**
-   * Creates a new video backend for the given file.
+   * Creates a new platform player for the given file.
+   *
+   * <p>{@link FlixelVideos#create(FlixelFile)} wraps the returned player in a {@link FlixelVideo}.
+   * If the native decoder cannot be set up, return a {@link FlixelUnavailableVideoPlayer} instead
+   * of throwing so the game keeps running.
    *
    * @param file The video file to open, obtained from {@link org.flixelgdx.Flixel#files}.
-   * @return A new backend instance.
+   * @return A new player instance; never {@code null}.
    */
   @NotNull
-  FlixelVideo createVideo(@NotNull FlixelFile file);
+  FlixelVideoPlayer createPlayer(@NotNull FlixelFile file);
 }

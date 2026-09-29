@@ -39,12 +39,11 @@ import org.teavm.jso.webgl.WebGLTexture;
  * garbage collector.
  *
  * <p>This subclass adds {@link #uploadFrom(JSObject)}, which hands a DOM element straight to
- * {@code texSubImage2D}: the {@code <video>} element for full-quality playback, or the offscreen
- * {@code <canvas>} element for quality-scaled playback. The browser handles that without any CPU
- * round-trip or Java-side allocation. It still extends {@link FlixelWebGlTexture} because the
+ * {@code texSubImage2D}. The browser handles that without any Java-side copy or typed-array
+ * allocation, and usually as a direct GPU-to-GPU copy. It still extends {@link FlixelWebGlTexture} because the
  * framework's WebGL batch only accepts that type as a drawable texture.
  */
-public final class FlixelVideoWebGlTexture extends FlixelWebGlTexture {
+public final class FlixelWebGlVideoTexture extends FlixelWebGlTexture {
 
   private final WebGLRenderingContext gl;
 
@@ -54,20 +53,22 @@ public final class FlixelVideoWebGlTexture extends FlixelWebGlTexture {
    * @param gl The WebGL rendering context.
    * @param width Texture width in pixels.
    * @param height Texture height in pixels.
+   * @param smooth {@code true} for linear filtering, {@code false} for nearest.
    */
-  public FlixelVideoWebGlTexture(@NotNull WebGLRenderingContext gl, int width, int height) {
-    super(gl, width, height, false);
+  public FlixelWebGlVideoTexture(@NotNull WebGLRenderingContext gl, int width, int height,
+      boolean smooth) {
+    super(gl, width, height, smooth);
     this.gl = gl;
   }
 
   /**
-   * Binds this texture and uploads the given DOM element (video or canvas) as its pixels.
+   * Binds this texture and uploads the given DOM element as its pixels.
    *
    * <p>The browser reads the element's current displayed frame at its natural dimensions, so the
    * element must match this texture's size. No Java-side copy or typed-array allocation occurs:
    * the pixel data travels from the DOM element straight to the GPU.
    *
-   * @param source The {@code <video>} or {@code <canvas>} element to read pixels from.
+   * @param source The {@code <video>} element to read pixels from.
    */
   public void uploadFrom(@NotNull JSObject source) {
     jsTexSubImage2DFromSource(gl, getGlTexture(), source);

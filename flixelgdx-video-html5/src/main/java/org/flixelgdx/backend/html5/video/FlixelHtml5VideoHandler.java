@@ -33,7 +33,7 @@ import org.jetbrains.annotations.NotNull;
 /**
  * Web video backend factory powered by the browser's own decoder.
  *
- * <p>It creates one {@link FlixelHtml5Player} per video; {@link FlixelVideos#create(FlixelFile)}
+ * <p>It creates one {@link FlixelHtml5VideoPlayer} per video; {@link FlixelVideos#create(FlixelFile)}
  * wraps the player in a {@link FlixelVideo}.
  *
  * <p>Install it once in your web launcher, before the game starts:
@@ -58,7 +58,7 @@ public final class FlixelHtml5VideoHandler implements FlixelVideoFactory {
   @NotNull
   @Override
   public FlixelVideoPlayer createPlayer(@NotNull FlixelFile file) {
-    return new FlixelHtml5Player(resolveUrl(file));
+    return new FlixelHtml5VideoPlayer(resolveUrl(file));
   }
 
   /**

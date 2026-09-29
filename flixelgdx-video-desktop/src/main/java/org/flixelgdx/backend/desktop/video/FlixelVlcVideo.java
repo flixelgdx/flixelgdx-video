@@ -23,7 +23,9 @@
  */
 package org.flixelgdx.backend.desktop.video;
 
+import com.sun.jna.CallbackThreadInitializer;
 import com.sun.jna.Memory;
+import com.sun.jna.Native;
 import com.sun.jna.Pointer;
 import com.sun.jna.ptr.IntByReference;
 import com.sun.jna.ptr.PointerByReference;
@@ -58,6 +60,9 @@ import java.nio.ByteBuffer;
  */
 public class FlixelVlcVideo extends FlixelVideo {
 
+  /** Shared initializer that keeps libvlc's native callback threads attached to the JVM as daemons. */
+  private static final CallbackThreadInitializer THREAD_INIT = new CallbackThreadInitializer(true, false, "flixel-vlc");
+
   /** Protects the frame buffer swap between the libvlc thread and the render thread. */
   private final Object bufferLock = new Object();
 
@@ -83,10 +88,8 @@ public class FlixelVlcVideo extends FlixelVideo {
 
   // Strong references keep the JNA callback trampolines alive while libvlc holds them.
   private final LibVlc.LockCallback lockCallback;
-  private final LibVlc.UnlockCallback unlockCallback;
   private final LibVlc.DisplayCallback displayCallback;
   private final LibVlc.FormatCallback formatCallback;
-  private final LibVlc.CleanupCallback cleanupCallback;
   private final LibVlc.EventCallback eventCallback;
 
   /** Decoded frame width in pixels, written by the format callback. */
@@ -172,16 +175,21 @@ public class FlixelVlcVideo extends FlixelVideo {
     }
 
     lockCallback = this::onLock;
-    unlockCallback = (opaque, picture, planes) -> {
-    };
     displayCallback = this::onDisplay;
     formatCallback = this::onFormat;
-    cleanupCallback = opaque -> {
-    };
     eventCallback = this::onEvent;
 
-    LibVlc.libvlc_video_set_format_callbacks(mediaPlayer, formatCallback, cleanupCallback);
-    LibVlc.libvlc_video_set_callbacks(mediaPlayer, lockCallback, unlockCallback, displayCallback, null);
+    // Without an initializer JNA attaches and detaches the native thread on every callback, which
+    // allocates a new Thread, name, and TLAB each time. Keeping the thread attached (detach = false)
+    // reuses one Java Thread per libvlc thread. The threads are daemons owned by libvlc, so nothing
+    // needs to be released on dispose. Unlock and cleanup are optional in libvlc 3.x, so pass null.
+    Native.setCallbackThreadInitializer(lockCallback, THREAD_INIT);
+    Native.setCallbackThreadInitializer(displayCallback, THREAD_INIT);
+    Native.setCallbackThreadInitializer(formatCallback, THREAD_INIT);
+    Native.setCallbackThreadInitializer(eventCallback, THREAD_INIT);
+
+    LibVlc.libvlc_video_set_format_callbacks(mediaPlayer, formatCallback, null);
+    LibVlc.libvlc_video_set_callbacks(mediaPlayer, lockCallback, null, displayCallback, null);
 
     eventManager = LibVlc.libvlc_media_player_event_manager(mediaPlayer);
     LibVlc.libvlc_event_attach(eventManager, LibVlc.EVENT_END_REACHED, eventCallback, null);

@@ -36,9 +36,9 @@ package org.flixelgdx.video;
  *   <li>Desktop (libvlc): the decode target is scaled before frames are handed to the
  *       framework, so the savings apply to the whole pipeline, including the CPU copy and the
  *       texture upload.</li>
- *   <li>Web: {@link #FULL} uploads the video element directly to WebGL (usually a GPU-to-GPU
- *       copy). Lower presets first draw each frame onto a reused offscreen canvas at the smaller
- *       size, and that canvas is uploaded instead.</li>
+ *   <li>Web: the video element is always uploaded directly to WebGL (usually a GPU-to-GPU copy).
+ *       {@link #FULL} draws that texture as is. Lower presets shrink it into a smaller render
+ *       target on the GPU, so they save texture memory and fill cost but not decode work.</li>
  *   <li>Android: the decoder always runs at the source resolution. The preset scales the render
  *       target the frame is drawn into on the GPU, so it saves texture memory and fill cost but
  *       not decode work.</li>

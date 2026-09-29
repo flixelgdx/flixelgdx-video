@@ -55,10 +55,12 @@ case the per-frame path allocates nothing.
   when a new frame is ready. The libvlc threads are kept attached to the JVM (a JNA callback thread
   initializer with `detach=false`), because attaching and detaching a thread on every callback would
   allocate on every frame.
-- **HTML5 (DOM element upload):** The browser decodes the hidden video element. The player uploads
-  the element directly to its own WebGL texture, so no pixels are read back into Java. At lower
-  quality presets, the frame is first drawn onto a reused offscreen canvas at the smaller size, and
-  the canvas is uploaded instead.
+- **HTML5 (DOM element upload, GPU shrink):** The browser decodes the hidden video element. The
+  player uploads the element directly to its own WebGL texture, so no pixels are read back into
+  Java. At lower quality presets, a small shader then draws that texture into a smaller framework
+  render target on the GPU, and the render target's texture is the frame the batch draws. The frame
+  never passes through a 2D canvas, because a canvas can force a slow software path in some
+  browsers, which made lower presets cost more than full quality.
 - **Android (SurfaceTexture, OES blit, render target):** `MediaPlayer` renders into a
   `SurfaceTexture`, which exposes each frame as an external OpenGL (OES) texture. The framework batch
   can only draw normal 2D textures, so on the render thread the player draws the OES texture once per

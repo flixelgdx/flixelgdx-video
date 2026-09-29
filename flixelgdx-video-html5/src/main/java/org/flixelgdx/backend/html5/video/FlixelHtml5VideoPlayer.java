@@ -25,6 +25,7 @@ package org.flixelgdx.backend.html5.video;
 
 import org.flixelgdx.Flixel;
 import org.flixelgdx.backend.html5.graphics.FlixelHtml5Graphics;
+import org.flixelgdx.graphics.FlixelRenderTarget;
 import org.flixelgdx.graphics.FlixelTexture;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoPlayer;
@@ -45,11 +46,12 @@ import org.teavm.jso.webgl.WebGLRenderingContext;
  * after the video renders above it). {@link FlixelVideo} wraps this player; game code does not use
  * it directly.
  *
- * <p>Each ready frame is uploaded to the GPU with no Java-side allocation. At full quality the
- * video element is passed directly to {@code texSubImage2D}, letting the browser copy pixels
- * straight from the decoder to the GPU. At lower {@link FlixelVideoQuality} presets the frame is
- * first drawn onto a reused offscreen canvas at the target size, and that canvas is passed to
- * {@code texSubImage2D} instead. Both paths avoid any {@code getImageData} or {@code byte[]} copy.
+ * <p>Each ready frame is uploaded to the GPU with no Java-side allocation. The video element is
+ * always passed directly to {@code texSubImage2D}, letting the browser copy pixels straight from
+ * the decoder to the GPU. At full quality that texture is the frame. At lower
+ * {@link FlixelVideoQuality} presets it is only a source: a tiny shader draws it into a smaller
+ * render target on the GPU, and that target is the frame. Nothing is ever read back to the CPU, and
+ * no {@code <canvas>} sits in between (a 2D canvas forces a slow software path in some browsers).
  *
  * <p>Autoplay policies may block {@link #play()} with sound before the first user
  * gesture; in that case playback resumes automatically on the next pointer or key
@@ -60,11 +62,21 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
   /** The hidden video element doing the decoding. */
   private final JSObject element;
 
-  /** Offscreen canvas used to draw each frame at quality-scaled dimensions before upload. */
+  /** Full-screen quad program and vertex array that shrink frames on the GPU, made on first use. */
   @Nullable
-  private JSObject scaleCanvas;
+  private JSObject blit;
 
-  /** The frame texture the browser frames are uploaded into; owned by this player. */
+  /**
+   * Receives the shrunk frame at lower quality presets; {@code null} at full quality. Its size is
+   * the quality-scaled frame size.
+   */
+  @Nullable
+  private FlixelRenderTarget target;
+
+  /**
+   * The texture the browser frames are uploaded into, always at the native video size; owned by
+   * this player. It is the drawn frame at full quality and the shrink source otherwise.
+   */
   @Nullable
   private FlixelWebGlVideoTexture videoTex;
 
@@ -232,44 +244,75 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
     if (jsGetReadyState(element) < 2) {
       return;
     }
-    int width = getFrameWidth();
-    int height = getFrameHeight();
-    if (width <= 0 || height <= 0) {
+    int nativeWidth = jsGetVideoWidth(element);
+    int nativeHeight = jsGetVideoHeight(element);
+    if (nativeWidth <= 0 || nativeHeight <= 0) {
+      return;
+    }
+    int width = scaledDimension(nativeWidth);
+    int height = scaledDimension(nativeHeight);
+    boolean full = mediaQuality == FlixelVideoQuality.FULL;
+
+    FlixelWebGlVideoTexture tex = videoTex;
+    FlixelRenderTarget scaled = target;
+    boolean sizeChanged = tex == null || nativeWidth != tex.getWidth() || nativeHeight != tex.getHeight();
+    boolean targetStale = full
+        ? scaled != null
+        : scaled == null || scaled.getWidth() != width || scaled.getHeight() != height;
+    boolean newFrame = jsConsumeFrameDirty(element);
+    if (!sizeChanged && !targetStale && !newFrame && !forceNextFrame) {
       return;
     }
 
-    FlixelWebGlVideoTexture tex = videoTex;
-    boolean sizeChanged = tex == null || width != tex.getWidth() || height != tex.getHeight();
-    boolean newFrame = jsConsumeFrameDirty(element);
-    if (!sizeChanged && !newFrame && !forceNextFrame) {
+    WebGLRenderingContext gl = ((FlixelHtml5Graphics) Flixel.graphics).getGl();
+    if (gl == null) {
       return;
     }
 
     if (sizeChanged) {
-      WebGLRenderingContext gl = ((FlixelHtml5Graphics) Flixel.graphics).getGl();
-      if (gl == null) {
-        return;
-      }
       if (tex != null) {
         tex.destroy();
       }
-      tex = new FlixelWebGlVideoTexture(gl, width, height);
+      // Linear filtering only matters when this texture is the shrink source.
+      tex = new FlixelWebGlVideoTexture(gl, nativeWidth, nativeHeight, !full);
       videoTex = tex;
+      ready = false;
+    } else if (forceNextFrame) {
+      tex.setSmooth(!full);
+    }
+
+    if (full) {
+      if (scaled != null) {
+        scaled.destroy();
+        target = null;
+      }
+    } else if (targetStale) {
+      FlixelRenderTarget created = Flixel.graphics.createRenderTarget(width, height);
+      if (created.getWidth() <= 0) {
+        // Graphics are not ready yet; the stale check keeps this retrying on the next frame.
+        return;
+      }
+      if (scaled != null) {
+        scaled.destroy();
+      }
+      scaled = created;
+      target = created;
       ready = false;
     }
     forceNextFrame = false;
 
-    // For full quality, pass the video element directly to texSubImage2D, with no canvas readback
-    // and no Java copy. For scaled quality, draw to the offscreen canvas at the target size first,
-    // then pass that canvas.
-    if (mediaQuality == FlixelVideoQuality.FULL) {
-      tex.uploadFrom(element);
-    } else {
-      if (scaleCanvas == null) {
-        scaleCanvas = jsCreateCanvas();
+    // The browser copies the decoded frame straight to the GPU. At lower quality, a GPU pass then
+    // shrinks it into the render target.
+    tex.uploadFrom(element);
+    if (!full) {
+      if (blit == null) {
+        blit = jsCreateBlit(gl);
       }
-      jsDrawScaled(scaleCanvas, element, width, height);
-      tex.uploadFrom(scaleCanvas);
+      // Anything the framework queued must reach the previous surface before the target changes.
+      Flixel.graphics.getBatch().flush();
+      scaled.begin();
+      jsBlit(gl, blit, tex.getGlTexture());
+      scaled.end();
     }
     ready = true;
   }
@@ -281,7 +324,17 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
     }
     disposed = true;
     jsDispose(element);
-    scaleCanvas = null;
+    if (target != null) {
+      target.destroy();
+      target = null;
+    }
+    if (blit != null) {
+      WebGLRenderingContext gl = ((FlixelHtml5Graphics) Flixel.graphics).getGl();
+      if (gl != null) {
+        jsDeleteBlit(gl, blit);
+      }
+      blit = null;
+    }
     if (videoTex != null) {
       videoTex.destroy();
       videoTex = null;
@@ -322,7 +375,11 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
   @Nullable
   @Override
   public FlixelTexture getFrame() {
-    return ready ? videoTex : null;
+    if (!ready) {
+      return null;
+    }
+    FlixelRenderTarget scaled = target;
+    return scaled != null ? scaled.getTexture() : videoTex;
   }
 
   @Override
@@ -458,11 +515,66 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
       + "v.load();")
   private static native void jsDispose(JSObject v);
 
-  @JSBody(script = "return document.createElement('canvas');")
-  private static native JSObject jsCreateCanvas();
+  /**
+   * Builds the program and vertex array that draw one texture across the whole framebuffer.
+   *
+   * <p>The quad has its own vertex array, so the batch's vertex state is left alone. Texture
+   * coordinate {@code y = 0} lands on the first row of memory, which is what a render target
+   * expects (top-down rows), so no flip is needed.
+   */
+  @JSBody(params = { "gl" }, script = """
+      var compile = function(type, source) {
+        var s = gl.createShader(type);
+        gl.shaderSource(s, source);
+        gl.compileShader(s);
+        return s;
+      };
+      var prog = gl.createProgram();
+      gl.attachShader(prog, compile(gl.VERTEX_SHADER, '#version 300 es\\n'
+          + 'layout(location=0) in vec2 a; out vec2 u;'
+          + 'void main() { u = a * 0.5 + 0.5; gl_Position = vec4(a, 0.0, 1.0); }'));
+      gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, '#version 300 es\\n'
+          + 'precision mediump float; in vec2 u; uniform sampler2D t; out vec4 c;'
+          + 'void main() { c = texture(t, u); }'));
+      gl.linkProgram(prog);
+      var vao = gl.createVertexArray();
+      gl.bindVertexArray(vao);
+      var buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0);
+      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+      gl.bindVertexArray(null);
+      gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      return { prog: prog, vao: vao, buf: buf };""")
+  private static native JSObject jsCreateBlit(WebGLRenderingContext gl);
 
-  @JSBody(params = { "canvas", "v", "w", "h" }, script = "if (canvas.width !== w) canvas.width = w;"
-      + "if (canvas.height !== h) canvas.height = h;"
-      + "canvas.getContext('2d').drawImage(v, 0, 0, w, h);")
-  private static native void jsDrawScaled(JSObject canvas, JSObject v, int w, int h);
+  /**
+   * Draws the source texture across the bound framebuffer, then puts back the GL state it touched.
+   *
+   * <p>Blending and the scissor test are switched off for the draw and restored afterward. The
+   * batch re-applies its own program, texture, buffers, and blend mode on every flush, but it does
+   * not manage the scissor test, so that one has to be put back here.
+   */
+  @JSBody(params = { "gl", "b", "src" }, script = """
+      var scissor = gl.isEnabled(gl.SCISSOR_TEST);
+      var blend = gl.isEnabled(gl.BLEND);
+      var prev = gl.getParameter(gl.CURRENT_PROGRAM);
+      if (scissor) gl.disable(gl.SCISSOR_TEST);
+      if (blend) gl.disable(gl.BLEND);
+      gl.useProgram(b.prog);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, src);
+      gl.bindVertexArray(b.vao);
+      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+      gl.bindVertexArray(null);
+      gl.useProgram(prev);
+      if (blend) gl.enable(gl.BLEND);
+      if (scissor) gl.enable(gl.SCISSOR_TEST);""")
+  private static native void jsBlit(WebGLRenderingContext gl, JSObject b, JSObject src);
+
+  @JSBody(params = { "gl", "b" }, script = "gl.deleteProgram(b.prog);"
+      + "gl.deleteVertexArray(b.vao);"
+      + "gl.deleteBuffer(b.buf);")
+  private static native void jsDeleteBlit(WebGLRenderingContext gl, JSObject b);
 }

@@ -24,19 +24,24 @@
 package org.flixelgdx.video;
 
 /**
- * Decode quality presets for a {@link FlixelVideo}.
+ * Quality presets for a {@link FlixelVideo}.
  *
- * <p>Lower presets decode into a smaller pixel buffer, which reduces CPU decode cost,
- * upload bandwidth, and memory. The drawn size on screen never changes; only the
- * source resolution the frames are produced at does, so lower presets look softer.
+ * <p>Lower presets shrink the pixel size the video is produced at, which reduces decode, copy, and
+ * memory cost. The drawn size on screen never changes; only the internal resolution does, so lower
+ * presets look softer.
  *
  * <p>How each platform applies the preset:
  *
  * <ul>
  *   <li>Desktop (libvlc): the decode target is scaled before frames are handed to the
- *       framework, so the savings apply to the whole pipeline.</li>
- *   <li>Web: {@link #FULL} uploads the video element directly to WebGL (usually a
- *       GPU-to-GPU copy). Lower presets route through a downscaled canvas first.</li>
+ *       framework, so the savings apply to the whole pipeline, including the CPU copy and the
+ *       texture upload.</li>
+ *   <li>Web: {@link #FULL} uploads the video element directly to WebGL (usually a GPU-to-GPU
+ *       copy). Lower presets first draw each frame onto a reused offscreen canvas at the smaller
+ *       size, and that canvas is uploaded instead.</li>
+ *   <li>Android: the decoder always runs at the source resolution. The preset scales the render
+ *       target the frame is drawn into on the GPU, so it saves texture memory and fill cost but
+ *       not decode work.</li>
  * </ul>
  */
 public enum FlixelVideoQuality {

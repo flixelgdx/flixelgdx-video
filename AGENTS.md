@@ -8,15 +8,20 @@ FlixelGDX Video is the optional video playback extension for [FlixelGDX](https:/
 It is a **platform-split extension**: a shared core API plus one backend per target platform, so a game only
 ships the decoder and natives it actually needs.
 
-This repository has three published Java modules and five packaging-only natives modules:
+This repository has four published Java modules and five packaging-only natives modules:
 
-- **`flixelgdx-video-core`**: The platform-neutral API (`FlixelVideo`, `FlixelVideos`, `FlixelVideoFactory`,
-  `FlixelVideoQuality`). Owns the shared upload path (one texture, rewritten pixels per frame). Depends only
-  on `flixelgdx-core`.
+- **`flixelgdx-video-core`**: The platform-neutral API (`FlixelVideo`, `FlixelVideoPlayer`, `FlixelVideos`,
+  `FlixelVideoFactory`, `FlixelVideoQuality`). `FlixelVideo` is the final, game-facing sprite that wraps a
+  `FlixelVideoPlayer` (the interface each backend implements); backends own their frame texture.
+  `FlixelVideoCpuFrame` is an optional helper for backends that decode into CPU pixels.
+  Depends only on `flixelgdx-core`.
 - **`flixelgdx-video-desktop`**: Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html),
-  bridged through JNA. Decodes frames via libvlc video callbacks and hands them to core.
-- **`flixelgdx-video-html5`**: Web backend built on a hidden HTML video element the browser decodes. Each frame
-  is read back and handed to core.
+  bridged through JNA. Decodes frames via libvlc video callbacks and copies them into a texture through core.
+- **`flixelgdx-video-html5`**: Web backend built on a hidden HTML video element the browser decodes. The element
+  is uploaded straight to a WebGL texture, with no CPU readback.
+- **`flixelgdx-video-android`**: Android backend built on `MediaPlayer`. Decodes into a `SurfaceTexture` and
+  draws it on the GPU into a render target. Only part of the build when the `includeAndroid` flag is set
+  (`-PincludeAndroid=true` or `includeAndroid=true` in `local.properties`), and it needs an Android SDK.
 - **`flixelgdx-video-vlc-natives-*`**: Packaging-only modules. They download, strip, and bundle the libvlc
   natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Only built when the
   `packageVlcNatives` Gradle property is set.
@@ -67,8 +72,9 @@ When explaining code or introducing patterns:
 ### Performance, Memory, and allocations
 
 - **Do not allocate objects inside loops or in methods invoked every frame.** The video upload path
-  (`FlixelVideo.updateFrame(...)`) is called per frame. Do not allocate there. The same rule applies to any
-  code a backend calls on its decode thread.
+  (`FlixelVideoPlayer.update(...)`, plus `FlixelVideo.update(...)` and `FlixelVideo.draw(...)`) is called per
+  frame. Do not allocate there. The same rule applies to any code a backend calls on its decode thread or
+  listener threads (libvlc callbacks, `MediaPlayer` and `SurfaceTexture` listeners).
 - **Always put fields in the correct order for each class**. Follow the order below:
 
   1. `long`s and `double`s
@@ -139,14 +145,15 @@ Documentation should read like a **beginner-friendly handbook**, not an expert-o
 ## Architecture and scope
 
 - `flixelgdx-video-core` is the only module a game's shared code should depend on. Keep backend quirks (libvlc
-  callbacks, JNA bindings, browser canvas reads) out of core; abstract with the `FlixelVideoFactory` service
+  callbacks, JNA bindings, browser DOM and canvas access, Android `MediaPlayer` and GL code) out of core; abstract with the `FlixelVideoFactory` service
   contract.
-- Desktop and HTML5 backends are **strictly separate**. Do not let desktop JNA types leak into core or the
-  HTML5 module.
+- Desktop, HTML5, and Android backends are **strictly separate**. Do not let desktop JNA types leak into core
+  or the other backends, and keep Android types (`android.*`) out of core, desktop, and HTML5.
 - The natives packaging modules (`flixelgdx-video-vlc-natives-*`) contain no Java source. Keep packaging logic
   in `DownloadVlcNativesTask`; do not add game-runtime code there.
 - Keep changes minimal: avoid touching unrelated files unless strictly necessary for the stated task.
-- The convention plugin in `build-logic/` applies to all modules. Changes there affect the whole project.
+- The convention plugins in `build-logic/` (including `flixelgdx.android-library` for the Android module) apply
+  to every module that uses them. Changes there can affect the whole project.
 
 ---
 

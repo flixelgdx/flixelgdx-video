@@ -273,7 +273,7 @@ public final class FlixelVideo extends FlixelBasic {
    * Centers this video on the screen on both axes.
    *
    * <p>The centering uses the drawn size (see {@link #getDrawWidth()}). Before the first frame
-   * arrives the frame size is {@code 0}, so a video drawn at its native size should be centered
+   * arrives the video size is {@code 0}, so a video drawn at its native size should be centered
    * again once {@link #isReady()} is {@code true} (or simply every frame).
    *
    * @return {@code this} for chaining.
@@ -287,7 +287,7 @@ public final class FlixelVideo extends FlixelBasic {
    * Centers this video on the screen along the given axes.
    *
    * <p>The centering uses the drawn size (see {@link #getDrawWidth()}). Before the first frame
-   * arrives the frame size is {@code 0}, so a video drawn at its native size should be centered
+   * arrives the video size is {@code 0}, so a video drawn at its native size should be centered
    * again once {@link #isReady()} is {@code true} (or simply every frame).
    *
    * @param axes The axes to center on.
@@ -540,21 +540,27 @@ public final class FlixelVideo extends FlixelBasic {
   }
 
   /**
-   * Returns the width of the decoded video frame in pixels.
+   * Returns the native width of the video in pixels.
    *
-   * @return Decoded frame width, or {@code 0} while the video is not yet ready.
+   * <p>This is the resolution of the source file and does not change with the
+   * {@link #setQuality(FlixelVideoQuality) quality}.
+   *
+   * @return Native video width, or {@code 0} while the video is not yet ready.
    */
   public int getVideoWidth() {
-    return player.getFrameWidth();
+    return player.getVideoWidth();
   }
 
   /**
-   * Returns the height of the decoded video frame in pixels.
+   * Returns the native height of the video in pixels.
    *
-   * @return Decoded frame height, or {@code 0} while the video is not yet ready.
+   * <p>This is the resolution of the source file and does not change with the
+   * {@link #setQuality(FlixelVideoQuality) quality}.
+   *
+   * @return Native video height, or {@code 0} while the video is not yet ready.
    */
   public int getVideoHeight() {
-    return player.getFrameHeight();
+    return player.getVideoHeight();
   }
 
   /**
@@ -631,21 +637,21 @@ public final class FlixelVideo extends FlixelBasic {
   /**
    * Returns the width the video is actually drawn at.
    *
-   * @return {@link #width} if it is greater than {@code 0}, otherwise the decoded frame width
+   * @return {@link #width} if it is greater than {@code 0}, otherwise the native video width
    *     (which is {@code 0} until the video is ready).
    */
   public float getDrawWidth() {
-    return width > 0f ? width : player.getFrameWidth();
+    return width > 0f ? width : player.getVideoWidth();
   }
 
   /**
    * Returns the height the video is actually drawn at.
    *
-   * @return {@link #height} if it is greater than {@code 0}, otherwise the decoded frame height
+   * @return {@link #height} if it is greater than {@code 0}, otherwise the native video height
    *     (which is {@code 0} until the video is ready).
    */
   public float getDrawHeight() {
-    return height > 0f ? height : player.getFrameHeight();
+    return height > 0f ? height : player.getVideoHeight();
   }
 
   /**

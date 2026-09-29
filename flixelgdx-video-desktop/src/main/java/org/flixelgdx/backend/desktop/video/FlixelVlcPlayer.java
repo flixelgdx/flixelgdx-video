@@ -118,6 +118,14 @@ public final class FlixelVlcPlayer implements FlixelVideoPlayer {
 
   private int visibleHeight;
 
+  /**
+   * Native (unscaled) display size reported by libvlc_video_get_size(...), cached so the getters
+   * never call into libvlc. Render thread only.
+   */
+  private int nativeWidth;
+
+  private int nativeHeight;
+
   /** Frame dimensions the visible size was computed for, to detect format changes. */
   private int visibleBasisWidth;
 
@@ -461,6 +469,8 @@ public final class FlixelVlcPlayer implements FlixelVideoPlayer {
     if (displayWidth <= 0 || displayHeight <= 0 || sourceWidth <= 0 || sourceHeight <= 0) {
       return;
     }
+    nativeWidth = displayWidth;
+    nativeHeight = displayHeight;
     visibleWidth = Math.min(width, Math.round(width * (displayWidth / (float) sourceWidth)));
     visibleHeight = Math.min(height, Math.round(height * (displayHeight / (float) sourceHeight)));
     visibleBasisWidth = width;
@@ -563,6 +573,16 @@ public final class FlixelVlcPlayer implements FlixelVideoPlayer {
   @Override
   public FlixelTexture getFrame() {
     return cpuFrame.getTexture();
+  }
+
+  @Override
+  public int getVideoWidth() {
+    return nativeWidth > 0 ? nativeWidth : setupSourceWidth;
+  }
+
+  @Override
+  public int getVideoHeight() {
+    return nativeHeight > 0 ? nativeHeight : setupSourceHeight;
   }
 
   @Override

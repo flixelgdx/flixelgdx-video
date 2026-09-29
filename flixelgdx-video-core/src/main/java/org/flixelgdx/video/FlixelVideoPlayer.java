@@ -170,22 +170,48 @@ public interface FlixelVideoPlayer {
   FlixelTexture getFrame();
 
   /**
-   * Returns the visible picture width in pixels.
+   * Returns the native width of the video in pixels.
    *
-   * <p>This can be smaller than the frame texture width (for example, codec padding). The caller
-   * crops the sampled region to {@code frameWidth / texture.getWidth()}.
+   * <p>This is the resolution of the source file. It does not change with the
+   * {@link FlixelVideoQuality quality}, and {@link FlixelVideo} uses it as the default drawn width
+   * so a lower quality never makes the video smaller on screen.
    *
-   * @return Visible frame width, or {@code 0} until the player is ready.
+   * @return Native video width, or {@code 0} until the player is ready.
+   */
+  int getVideoWidth();
+
+  /**
+   * Returns the native height of the video in pixels.
+   *
+   * <p>This is the resolution of the source file. It does not change with the
+   * {@link FlixelVideoQuality quality}, and {@link FlixelVideo} uses it as the default drawn height
+   * so a lower quality never makes the video smaller on screen.
+   *
+   * @return Native video height, or {@code 0} until the player is ready.
+   */
+  int getVideoHeight();
+
+  /**
+   * Returns the width of the picture inside the frame texture in pixels.
+   *
+   * <p>This is only used for the UV crop, not for the drawn size. It can be smaller than the frame
+   * texture width (for example, codec padding) and smaller than {@link #getVideoWidth()} at a lower
+   * {@link FlixelVideoQuality quality}. The caller crops the sampled region to
+   * {@code frameWidth / texture.getWidth()}.
+   *
+   * @return Picture width inside the frame texture, or {@code 0} until the player is ready.
    */
   int getFrameWidth();
 
   /**
-   * Returns the visible picture height in pixels.
+   * Returns the height of the picture inside the frame texture in pixels.
    *
-   * <p>This can be smaller than the frame texture height (for example, codec padding). The caller
-   * crops the sampled region to {@code frameHeight / texture.getHeight()}.
+   * <p>This is only used for the UV crop, not for the drawn size. It can be smaller than the frame
+   * texture height (for example, codec padding) and smaller than {@link #getVideoHeight()} at a
+   * lower {@link FlixelVideoQuality quality}. The caller crops the sampled region to
+   * {@code frameHeight / texture.getHeight()}.
    *
-   * @return Visible frame height, or {@code 0} until the player is ready.
+   * @return Picture height inside the frame texture, or {@code 0} until the player is ready.
    */
   int getFrameHeight();
 

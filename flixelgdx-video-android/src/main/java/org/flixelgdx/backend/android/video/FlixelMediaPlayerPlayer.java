@@ -751,6 +751,16 @@ public final class FlixelMediaPlayerPlayer implements FlixelVideoPlayer {
   }
 
   @Override
+  public int getVideoWidth() {
+    return videoWidth;
+  }
+
+  @Override
+  public int getVideoHeight() {
+    return videoHeight;
+  }
+
+  @Override
   public int getFrameWidth() {
     FlixelRenderTarget target = renderTarget;
     return target != null ? target.getWidth() : 0;

@@ -125,6 +125,16 @@ public final class FlixelUnavailableVideoPlayer implements FlixelVideoPlayer {
   }
 
   @Override
+  public int getVideoWidth() {
+    return 0;
+  }
+
+  @Override
+  public int getVideoHeight() {
+    return 0;
+  }
+
+  @Override
   public int getFrameWidth() {
     return 0;
   }

@@ -65,6 +65,11 @@ case the per-frame path allocates nothing.
   new frame into a framework render target. That render target's texture is the frame the batch
   draws. The quality preset scales the render target.
 
+Quality only changes the resolution of the frame texture. Each `FlixelVideoPlayer` reports the
+video's native size (`getVideoWidth/Height`), which `FlixelVideo` uses as its default drawn size, and
+separately the picture size inside the texture (`getFrameWidth/Height`), which is only used for the
+UV crop. A lower quality is therefore stretched to the same on-screen size and just looks softer.
+
 ## Build System
 
 FlixelGDX Video uses **Gradle** with the modern Kotlin DSL, mirroring the framework.

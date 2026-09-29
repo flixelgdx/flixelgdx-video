@@ -326,6 +326,16 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
   }
 
   @Override
+  public int getVideoWidth() {
+    return disposed ? 0 : jsGetVideoWidth(element);
+  }
+
+  @Override
+  public int getVideoHeight() {
+    return disposed ? 0 : jsGetVideoHeight(element);
+  }
+
+  @Override
   public int getFrameWidth() {
     if (disposed) {
       return 0;

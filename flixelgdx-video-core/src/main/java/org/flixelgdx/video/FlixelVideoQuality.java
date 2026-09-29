@@ -26,9 +26,9 @@ package org.flixelgdx.video;
 /**
  * Quality presets for a {@link FlixelVideo}.
  *
- * <p>Lower presets shrink the pixel size the video is produced at, which reduces decode, copy, and
- * memory cost. The drawn size on screen never changes; only the internal resolution does, so lower
- * presets look softer.
+ * <p>Lower presets lower the resolution the video is decoded and uploaded at, which reduces decode,
+ * copy, and memory cost. The drawn size on screen stays the same (the smaller texture is stretched
+ * to the native size, or to the size set on the video), so lower presets only look softer.
  *
  * <p>How each platform applies the preset:
  *

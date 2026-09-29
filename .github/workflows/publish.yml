@@ -53,6 +53,12 @@ jobs:
       - name: Install p7zip (required to extract the macOS VLC DMG on Linux)
         run: sudo apt-get install -y p7zip-full
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          # Space-separated list (multiline is passed as one arg and breaks sdkmanager).
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
+
       - name: Publish to Maven Central
         # Secrets are injected as Gradle project properties via the ORG_GRADLE_PROJECT_ prefix.
         # signingInMemoryKey is the ASCII-armored GPG private key (supports newlines safely as an env var).
@@ -60,6 +66,8 @@ jobs:
         # packageVlcNatives=true triggers DownloadVlcNativesTask in the flixelgdx-video-vlc-natives
         # modules, which downloads and strips every platform/architecture bundle before they are
         # JAR-packaged and published alongside the rest of the video artifacts.
+        # includeAndroid=true adds the flixelgdx-video-android module, which is left out of the
+        # build by default so contributors do not need an Android SDK.
         env:
           ORG_GRADLE_PROJECT_signingInMemoryKeyId: ${{ secrets.SIGNING_KEY_ID }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.SIGNING_KEY }}
@@ -69,5 +77,6 @@ jobs:
         run: |
           ./gradlew publishAllPublicationsToMavenCentralRepository \
             -PpackageVlcNatives=true \
+            -PincludeAndroid=true \
             --no-daemon \
             --warning-mode all

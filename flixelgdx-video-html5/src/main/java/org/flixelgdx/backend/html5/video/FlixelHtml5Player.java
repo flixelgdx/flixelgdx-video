@@ -360,10 +360,20 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
       v.flixelVolume = 1;
       v.flixelLoop = false;
       v.flxLastTime = -1.0;
+      v.flxFrameDirty = false;
+      v.flxFrameCb = 0;
       v.addEventListener('loadedmetadata', function() {
         v.volume = v.flixelVolume;
         v.loop = v.flixelLoop;
       });
+      if (v.requestVideoFrameCallback) {
+        var onFrame = function() {
+          v.flxFrameDirty = true;
+          v.flxFrameCb = v.requestVideoFrameCallback(onFrame);
+        };
+        v.flxFrameCb = v.requestVideoFrameCallback(onFrame);
+        v.addEventListener('seeked', function() { v.flxFrameDirty = true; });
+      }
       v.load();
       return v;""")
   private static native JSObject jsCreateVideo(String url);
@@ -423,13 +433,21 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
   private static native int jsGetReadyState(JSObject v);
 
   /**
-   * Returns whether the decoder has advanced to a new frame since the last call.
+   * Returns whether the browser has presented a new video frame since the last call.
    *
-   * <p>{@code currentTime} advances exactly once per decoded frame, giving per-frame
-   * resolution without any event listener. The {@code timeupdate} event fires at most
-   * four times per second per spec, which is too coarse for smooth video playback.
+   * <p>Browsers that support {@code requestVideoFrameCallback} fire it once per presented frame,
+   * so a 30 fps video reports 30 new frames per second no matter how fast the game renders. That
+   * keeps the costly texture upload from running on game frames that would only repeat the same
+   * picture. A {@code seeked} listener also marks the frame dirty so a seek while paused still
+   * refreshes the texture.
+   *
+   * <p>Browsers without that API fall back to comparing {@code currentTime}. That value is
+   * interpolated by the media clock and usually changes on every game frame, so the fallback is
+   * correct but uploads more often than needed.
    */
-  @JSBody(params = { "v" }, script = "var t = v.currentTime;"
+  @JSBody(params = { "v" }, script = "if (v.flxFrameCb) {"
+      + "var d = v.flxFrameDirty; v.flxFrameDirty = false; return d; }"
+      + "var t = v.currentTime;"
       + "if (t !== v.flxLastTime) { v.flxLastTime = t; return true; }"
       + "return false;")
   private static native boolean jsConsumeFrameDirty(JSObject v);
@@ -440,7 +458,10 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
   @JSBody(params = { "v" }, script = "return v.videoHeight;")
   private static native int jsGetVideoHeight(JSObject v);
 
-  @JSBody(params = { "v" }, script = "v.pause();"
+  @JSBody(params = { "v" }, script = "if (v.flxFrameCb && v.cancelVideoFrameCallback) {"
+      + "v.cancelVideoFrameCallback(v.flxFrameCb); }"
+      + "v.flxFrameCb = 0;"
+      + "v.pause();"
       + "v.removeAttribute('src');"
       + "v.load();")
   private static native void jsDispose(JSObject v);

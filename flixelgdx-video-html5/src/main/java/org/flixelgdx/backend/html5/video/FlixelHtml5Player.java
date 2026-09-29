@@ -357,15 +357,9 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
       v.crossOrigin = 'anonymous';
       v.preload = 'auto';
       v.playsInline = true;
-      v.flixelVolume = 1;
-      v.flixelLoop = false;
       v.flxLastTime = -1.0;
       v.flxFrameDirty = false;
       v.flxFrameCb = 0;
-      v.addEventListener('loadedmetadata', function() {
-        v.volume = v.flixelVolume;
-        v.loop = v.flixelLoop;
-      });
       if (v.requestVideoFrameCallback) {
         var onFrame = function() {
           v.flxFrameDirty = true;
@@ -383,7 +377,6 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
    * gesture yet), one-shot listeners retry on the next pointer or key event.
    */
   @JSBody(params = { "v" }, script = """
-      v.volume = v.flixelVolume;
       var p = v.play();
       if (p && p.catch) {
         p.catch(function() {
@@ -393,7 +386,6 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
             v.flixelResumeArmed = false;
             document.removeEventListener('pointerdown', resume);
             document.removeEventListener('keydown', resume);
-            v.volume = v.flixelVolume;
             v.play();
           };
           document.addEventListener('pointerdown', resume);
@@ -423,10 +415,10 @@ public final class FlixelHtml5Player implements FlixelVideoPlayer {
   @JSBody(params = { "v", "rate" }, script = "v.playbackRate = rate;")
   private static native void jsSetRate(JSObject v, float rate);
 
-  @JSBody(params = { "v", "loop" }, script = "v.flixelLoop = loop; v.loop = loop;")
+  @JSBody(params = { "v", "loop" }, script = "v.loop = loop;")
   private static native void jsSetLoop(JSObject v, boolean loop);
 
-  @JSBody(params = { "v", "volume" }, script = "v.flixelVolume = volume; v.volume = volume;")
+  @JSBody(params = { "v", "volume" }, script = "v.volume = volume;")
   private static native void jsSetVolume(JSObject v, float volume);
 
   @JSBody(params = { "v" }, script = "return v.readyState;")

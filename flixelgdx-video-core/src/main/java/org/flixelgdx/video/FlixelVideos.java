@@ -36,10 +36,15 @@ import org.jetbrains.annotations.Nullable;
  * starts:
  *
  * <pre>{@code
- * public static void main(String[] args) {
- *   FlixelDesktopVideoHandler.install();
- *   FlixelDesktopLauncher.launch(new MyGame());
- * }
+ * // Desktop launcher.
+ * FlixelDesktopVideoHandler.install();
+ * FlixelDesktopLauncher.launch(new MyGame());
+ *
+ * // Web launcher.
+ * FlixelHtml5VideoHandler.install();
+ *
+ * // Android launcher.
+ * FlixelAndroidVideoHandler.install();
  * }</pre>
  *
  * <p>After that, creating a video anywhere in the game needs no further setup. Videos are located
@@ -82,18 +87,20 @@ public final class FlixelVideos {
     FlixelVideoFactory factory = backendFactory;
     if (factory == null) {
       throw new IllegalStateException(
-          "No video backend factory registered. Call the platform installer first, e.g. "
-              + "FlixelDesktopVideoHandler.install() in your desktop launcher or "
-              + "FlixelHtml5VideoHandler.install() in your web launcher.");
+          "No video backend factory registered. Install the video handler for your platform "
+              + "in your launcher before creating videos (for example "
+              + "FlixelDesktopVideoHandler.install(), FlixelHtml5VideoHandler.install(), or "
+              + "FlixelAndroidVideoHandler.install()).");
     }
-    return factory.createVideo(file);
+    return new FlixelVideo(factory.createPlayer(file));
   }
 
   /**
    * Registers the platform video backend factory.
    *
    * <p>Called once by the platform installer (for example {@code FlixelDesktopVideoHandler.install()}
-   * on desktop or {@code FlixelHtml5VideoHandler.install()} on the web) before any video is created.
+   * on desktop, {@code FlixelHtml5VideoHandler.install()} on the web, or
+   * {@code FlixelAndroidVideoHandler.install()} on Android) before any video is created.
    *
    * @param factory The backend factory to use (must not be {@code null}).
    * @throws IllegalArgumentException If {@code factory} is {@code null}.

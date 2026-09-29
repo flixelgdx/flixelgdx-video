@@ -68,6 +68,8 @@ jobs:
           - os: macos-latest
             platform: macos
           - os: ubuntu-latest
+            platform: android
+          - os: ubuntu-latest
             platform: web
     steps:
       - name: Checkout
@@ -80,6 +82,19 @@ jobs:
           java-version: 17
           cache: 'gradle'
 
+      - name: Set up Android SDK
+        if: matrix.platform == 'android'
+        uses: android-actions/setup-android@v3
+        with:
+          # Space-separated list (multiline is passed as one arg and breaks sdkmanager).
+          packages: "platform-tools platforms;android-36 build-tools;36.0.0"
+
+      - name: Create local.properties (Android)
+        if: matrix.platform == 'android'
+        run: |
+          SDK_DIR="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          echo "sdk.dir=$SDK_DIR" >> local.properties
+
       - name: Grant execute permission for gradlew
         if: matrix.os != 'windows-latest'
         run: chmod +x gradlew
@@ -87,6 +102,11 @@ jobs:
       - name: Build (Desktop)
         if: matrix.platform == 'linux' || matrix.platform == 'windows' || matrix.platform == 'macos'
         run: ./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-desktop:assemble --no-daemon
+        shell: bash
+
+      - name: Build (Android)
+        if: matrix.platform == 'android'
+        run: ./gradlew -PincludeAndroid=true :flixelgdx-video-core:assemble :flixelgdx-video-android:assembleRelease --no-daemon
         shell: bash
 
       - name: Build (Web)

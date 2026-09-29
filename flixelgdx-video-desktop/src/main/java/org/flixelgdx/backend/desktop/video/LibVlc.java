@@ -40,7 +40,7 @@ import com.sun.jna.ptr.PointerByReference;
  *
  * <p>All callback interfaces are invoked from libvlc's own decoder threads, never from
  * the render thread. Implementations must therefore stay allocation-free and hand data
- * over through fields that the render thread polls (see {@code FlixelVlcVideo}).
+ * over through fields that the render thread polls (see {@code FlixelVlcPlayer}).
  */
 final class LibVlc {
 

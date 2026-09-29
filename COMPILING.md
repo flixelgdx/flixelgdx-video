@@ -18,11 +18,12 @@ framework's guide, which applies here unchanged:
 1. [Prerequisites](#prerequisites)
 2. [Getting the source](#getting-the-source)
 3. [How this extension depends on the framework](#how-this-extension-depends-on-the-framework)
-4. [Building the extension](#building-the-extension)
-5. [Per-platform build checks](#per-platform-build-checks)
-6. [Testing the extension in a game (composite build)](#testing-the-extension-in-a-game-composite-build)
-7. [Packaging the libvlc natives locally](#packaging-the-libvlc-natives-locally)
-8. [Troubleshooting](#troubleshooting)
+4. [Including the Android module](#including-the-android-module)
+5. [Building the extension](#building-the-extension)
+6. [Per-platform build checks](#per-platform-build-checks)
+7. [Testing the extension in a game (composite build)](#testing-the-extension-in-a-game-composite-build)
+8. [Packaging the libvlc natives locally](#packaging-the-libvlc-natives-locally)
+9. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -32,6 +33,9 @@ framework's guide, which applies here unchanged:
   Install Temurin 17 as described in the framework's
   [COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/master/COMPILING.md).
 - **Git**, to clone this repository and the framework.
+- **(Android module only)** The Android SDK, with a platform (CI uses `android-36`) and the matching
+  build tools. Install it with Android Studio or `sdkmanager`. It is only needed when the Android
+  module is included in the build (see [Including the Android module](#including-the-android-module)).
 - **(Desktop packaging only)** `p7zip` on Linux, needed to extract the macOS VLC DMG when packaging
   natives. See [Packaging the libvlc natives locally](#packaging-the-libvlc-natives-locally).
 
@@ -65,6 +69,7 @@ The video modules declare the framework as ordinary external dependencies, pinne
 flixelgdx-video-core    -> org.flixelgdx:flixelgdx-core
 flixelgdx-video-desktop -> org.flixelgdx:flixelgdx-desktop (+ flixelgdx-video-core)
 flixelgdx-video-html5   -> org.flixelgdx:flixelgdx-html5   (+ flixelgdx-video-core)
+flixelgdx-video-android -> org.flixelgdx:flixelgdx-android (+ flixelgdx-video-core)
 ```
 
 Gradle resolves those coordinates from the repositories declared in
@@ -91,6 +96,35 @@ This substitutes the framework artifacts with your local `../flixelgdx` checkout
 coordinates, so the `flixelgdx` version number in the catalog does not need to match while the flag
 is present. Any framework change is picked up on the next build with no republishing. Add the flag to
 whichever Gradle command you are running (`build`, `test`, an IDE's Gradle sync arguments, and so on).
+
+> [!IMPORTANT]
+> The Android backend uses the framework's GLES Android backend. That backend is on the framework's
+> `master` branch but is newer than the `flixelgdx` version pinned in the catalog, so building the
+> Android module during development needs `--include-build ../flixelgdx` until a framework release
+> contains it. Nothing attaches the framework automatically; you always pass the flag yourself.
+
+---
+
+## Including the Android module
+
+The Android module (`flixelgdx-video-android`) is off by default, so a normal build does not need an
+Android SDK. Turn it on with either of these:
+
+- Pass `-PincludeAndroid=true` on the command line, for example
+  `./gradlew assemble -PincludeAndroid=true`.
+- Add `includeAndroid=true` to a `local.properties` file in the project root.
+
+The Android SDK location comes from `sdk.dir` in the same `local.properties` file (or the
+`ANDROID_HOME` environment variable). A ready-made template is in
+[`example.local.properties`](example.local.properties): copy it to `local.properties` and edit the
+values. `local.properties` is machine-specific and is not committed.
+
+Once included, build it with:
+
+```bash
+./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-android:assembleRelease \
+          -PincludeAndroid=true --include-build ../flixelgdx
+```
 
 ---
 
@@ -125,6 +159,7 @@ CI compiles each platform backend on its own. You can reproduce any of them loca
 |----------|---------|
 | **Desktop** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-desktop:assemble` |
 | **Web** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-html5:assemble` |
+| **Android** | `./gradlew -PincludeAndroid=true :flixelgdx-video-core:assemble :flixelgdx-video-android:assembleRelease` (needs the Android SDK; add `--include-build ../flixelgdx` as described above) |
 
 ---
 
@@ -155,9 +190,12 @@ every change is picked up on the next build with no republishing.
 
    // desktop module
    implementation 'org.flixelgdx:flixelgdx-video-desktop:<flixelgdx-version>'
+
+   // android module (only exists when the extension is built with includeAndroid=true)
+   implementation 'org.flixelgdx:flixelgdx-video-android:<flixelgdx-version>'
    ```
 4. Install the backend in your launcher and create a video, exactly as shown in the
-   [README](README.md#usage).
+   [README](README.md#how-do-i-use-it).
 5. Refresh Gradle and run the game (for example `./gradlew :desktop:run`).
 
 > [!NOTE]
@@ -230,6 +268,12 @@ installing VLC on your machine is enough to see desktop video play.
   [above](#building-against-a-local-framework-checkout)), so the framework builds from source instead
   of being resolved from a repository. Remember that transitive framework modules (such as
   `flixelgdx-jvm`) must resolve too, so including the whole framework checkout is the safest option.
+
+### The `flixelgdx-video-android` project is not found
+
+- **Cause**: the Android module is only included when `includeAndroid` is on.
+- **Fix**: pass `-PincludeAndroid=true` or set `includeAndroid=true` in `local.properties`, and make
+  sure `sdk.dir` points at your Android SDK.
 
 ### Desktop video never becomes ready
 

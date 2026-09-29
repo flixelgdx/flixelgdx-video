@@ -6,9 +6,9 @@
 [![Maven Central](https://img.shields.io/maven-central/v/org.flixelgdx/flixelgdx-video-core)](https://central.sonatype.com/artifact/org.flixelgdx/flixelgdx-video-core)
 [![JitPack](https://jitpack.io/v/flixelgdx/flixelgdx-video.svg)](https://jitpack.io/#flixelgdx/flixelgdx-video)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![FlixelGDX 0.6.4](https://img.shields.io/badge/FlixelGDX-0.6.4-red)](https://kotlinlang.org/)
+[![FlixelGDX 0.6.2](https://img.shields.io/badge/FlixelGDX-0.6.2-red)](https://kotlinlang.org/)
 [![Java 17+](https://img.shields.io/badge/Java-17%2B-orange)](https://adoptium.net/temurin/releases?version=17&os=any&arch=any)
-[![Platforms](https://img.shields.io/badge/platforms-Desktop%20%7C%20Web-brightgreen)](https://flixelgdx.org)
+[![Platforms](https://img.shields.io/badge/platforms-Desktop%20%7C%20Web%20%7C%20Android-brightgreen)](https://flixelgdx.org)
 
 </div>
 
@@ -27,8 +27,15 @@ It's the perfect tool to seamlessly play video files directly inside your game f
 The extension is split into a platform-neutral API plus one backend per platform, so your build
 only carries the code and natives for the platforms you target.
 
-| Module                              | Purpose                                                                                                                                                                                                                                                                         |
-|-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Module                              | Purpose                                                                                                                                                                                                                             |
+|-------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **`flixelgdx-video-core`**          | The platform-neutral API (`FlixelVideo`, `FlixelVideoPlayer`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`). `FlixelVideo` is the sprite your game uses; each backend supplies a `FlixelVideoPlayer` that decodes frames and owns the frame texture. Depends only on `flixelgdx-core`. |
+| **`flixelgdx-video-desktop`**       | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA. Frames are decoded into memory and copied into a texture.                                                                          |
+| **`flixelgdx-video-html5`**         | Web backend built on a hidden HTML video element the browser decodes. The element is uploaded straight to a WebGL texture, with no CPU readback.                                                                                       |
+| **`flixelgdx-video-android`**       | Android backend built on the platform `MediaPlayer`. Frames are decoded into a `SurfaceTexture` and drawn on the GPU into a render target, so no pixels pass through Java memory. Needs no native library.                             |
+| **`flixelgdx-video-vlc-natives-*`** | Packaging-only modules that bundle the stripped libvlc natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Pulled in automatically by the desktop backend.                                                        |
+
+-------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | **`flixelgdx-video-core`**          | The platform-neutral API (`FlixelVideo`, `FlixelVideos`, `FlixelVideoFactory`, `FlixelVideoQuality`). Holds the shared "reuse one texture, rewrite its pixels" upload path, so every backend only has to decode a frame into a `FlixelImage`. Depends only on `flixelgdx-core`. |
 | **`flixelgdx-video-desktop`**       | Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html), bridged through JNA.                                                                                                                                                                             |
 | **`flixelgdx-video-html5`**         | Web backend built on a hidden HTML video element the browser decodes; each frame is read back and handed to core.                                                                                                                                                               |
@@ -66,6 +73,14 @@ dependencies {
 }
 ```
 
+**Android launcher module:**
+
+```gradle
+dependencies {
+  implementation "org.flixelgdx:flixelgdx-video-android:<flixelgdx-version>"
+}
+```
+
 Each backend depends on `flixelgdx-video-core`, so pulling in a backend also brings the API with it.
 
 ---
@@ -92,6 +107,33 @@ public static void main(String[] args) {
 }
 ```
 
+**Android:**
+
+```java
+public class MyActivity extends Activity {
+
+  @Override
+  protected void onCreate(Bundle savedInstanceState) {
+    super.onCreate(savedInstanceState);
+    FlixelAndroidVideoHandler.install(this);
+    FlixelAndroidLauncher.launch(this, new MyGame());
+  }
+}
+```
+
+> [!NOTE]
+> On Android, videos in your `assets` folder must be stored uncompressed in the APK. The build tools
+> already do this for `.mp4`, `.m4v`, `.3gp`, `.mkv`, and `.webm`. For any other extension, such as
+> `.mov`, add it to the no-compress list in your Android module's `build.gradle.kts`:
+>
+> ```kotlin
+> android {
+>   androidResources {
+>     noCompress += "mov"
+>   }
+> }
+> ```
+
 After that, you can immediately start using cross-platform videos in your game. To create a video, you simply call
 `FlixelVideos.create(...)`, pass a `FlixelFile` into it, configure it and add it to your state.
 
@@ -104,6 +146,7 @@ public class PlayState extends FlixelState {
   public void create() {
     cutscene = FlixelVideos.create(Flixel.files.internal("videos/intro.mp4"));
     cutscene.setSize(1280, 720);
+    cutscene.screenCenter();
     cutscene.setLooped(false);
     cutscene.onComplete.add(data -> Flixel.switchState(() -> new MenuState()));
     add(cutscene);
@@ -123,9 +166,9 @@ public class PlayState extends FlixelState {
 ## Contributing and building
 
 - **[COMPILING.md](COMPILING.md)** - how to build and test the extension locally, including the
-  recommended composite build against a local framework clone.
+  building against a local framework clone with `--include-build`.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - contribution guidelines (shared with the main framework).
-- **[PROJECT.md](ARCHITECTURE.md)** - the module layout and build system overview.
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - the module layout and build system overview.
 
 ---
 

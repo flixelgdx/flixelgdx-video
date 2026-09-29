@@ -26,11 +26,15 @@ package org.flixelgdx.backend.html5.video;
 import org.flixelgdx.file.FlixelFile;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoFactory;
+import org.flixelgdx.video.FlixelVideoPlayer;
 import org.flixelgdx.video.FlixelVideos;
 import org.jetbrains.annotations.NotNull;
 
 /**
  * Web video backend factory powered by the browser's own decoder.
+ *
+ * <p>It creates one {@link FlixelHtml5Player} per video; {@link FlixelVideos#create(FlixelFile)}
+ * wraps the player in a {@link FlixelVideo}.
  *
  * <p>Install it once in your web launcher, before the game starts:
  *
@@ -53,8 +57,8 @@ public final class FlixelHtml5VideoHandler implements FlixelVideoFactory {
 
   @NotNull
   @Override
-  public FlixelVideo createVideo(@NotNull FlixelFile file) {
-    return new FlixelHtml5Video(resolveUrl(file));
+  public FlixelVideoPlayer createPlayer(@NotNull FlixelFile file) {
+    return new FlixelHtml5Player(resolveUrl(file));
   }
 
   /**

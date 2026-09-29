@@ -29,9 +29,8 @@ import org.flixelgdx.FlixelCamera;
 import org.flixelgdx.audio.FlixelSound;
 import org.flixelgdx.file.FlixelFile;
 import org.flixelgdx.graphics.FlixelBatch;
-import org.flixelgdx.graphics.FlixelGraphicsManager;
-import org.flixelgdx.graphics.FlixelImage;
 import org.flixelgdx.graphics.FlixelTexture;
+import org.flixelgdx.util.FlixelAxes;
 import org.flixelgdx.util.signal.FlixelSignal;
 import org.flixelgdx.util.signal.FlixelSignal.SignalHandler;
 import org.jetbrains.annotations.NotNull;
@@ -45,8 +44,14 @@ import org.jetbrains.annotations.Nullable;
  * {@link org.flixelgdx.FlixelState FlixelState}. Draw order follows state member order:
  * a sprite added after the video renders on top of it, exactly as with two sprites.
  *
+ * <p>This class is the game-facing half of a composition design. It does not decode anything
+ * itself. Instead it holds a {@link FlixelVideoPlayer}, the platform backend that decodes the
+ * file and owns the texture with the latest frame, and adds everything games care about on top:
+ * signals, positioning, drawing, auto-pause, and the completion event. Because the player only
+ * has to expose a texture, a backend may fill it from CPU pixels or entirely on the GPU.
+ *
  * <p>Create instances through {@link FlixelVideos#create(FlixelFile)}, which picks the
- * platform backend registered by your launcher:
+ * platform player registered by your launcher:
  *
  * <pre>{@code
  * FlixelVideo cutscene = FlixelVideos.create(Flixel.files.internal("videos/intro.mp4"));
@@ -61,25 +66,19 @@ import org.jetbrains.annotations.Nullable;
  * {@link FlixelSound}. Call {@link #destroy()} when the video leaves the game for good to
  * release the decoder and the frame texture.
  *
- * <p>The frame image is the same on every platform: each backend decodes into a reusable
- * {@link FlixelImage} of RGBA pixels and hands it to {@link #updateFrame(FlixelImage)}, which keeps
- * a single {@link FlixelTexture} alive and scrubs its pixels in place. Because that "reuse one
- * texture, rewrite its pixels" step lives here in core and rides on the portable graphics
- * interface, every backend gets it without repeating the GPU plumbing.
- *
  * <p>The video pauses automatically when the window loses focus or the application is sent to the
  * background (the same {@link Flixel.Signals#windowUnfocused} and {@link Flixel.Signals#windowFocused}
  * events the framework pauses audio on) while {@link Flixel#autoPause} is {@code true}, and resumes
- * when focus returns.
+ * when focus returns. Auto-pause talks to the player directly, so it does not fire
+ * {@link #onPause} or {@link #onResume}.
  *
- * <p>Subclassing this type is only needed for a custom media pipeline. Platform backends
- * implement the {@code protected abstract} template methods ({@link #playMedia()},
- * {@link #updateMedia(float)}, and so on) and inherit the display, lifecycle, and
- * auto-pause behavior automatically.
+ * <p>Advanced code that needs a backend-specific feature can reach the player through
+ * {@link #getPlayer()}.
  *
  * @see FlixelVideos
+ * @see FlixelVideoPlayer
  */
-public abstract class FlixelVideo extends FlixelBasic {
+public final class FlixelVideo extends FlixelBasic {
 
   /** Signal dispatched when this video starts playing. **/
   @NotNull
@@ -96,34 +95,6 @@ public abstract class FlixelVideo extends FlixelBasic {
   /** Signal dispatched once when this non-looping video reaches its end. */
   @NotNull
   public final FlixelSignal<Void> onComplete = new FlixelSignal<>();
-
-  @NotNull
-  private FlixelVideoQuality quality = FlixelVideoQuality.FULL;
-
-  /** The reusable GPU texture the latest frame is scrubbed into; {@code null} before the first frame. */
-  @Nullable
-  private FlixelTexture texture;
-
-  /**
-   * Pauses the video when the window loses focus (or the app is backgrounded), so it lines up with
-   * the framework pausing audio. Kept as a field so it can be unregistered in {@link #destroy()}.
-   */
-  private final SignalHandler<Void> onWindowUnfocused = data -> {
-    // These fields (autoPaused) are declared lower in the class, so qualify with this to satisfy
-    // the forward-reference rule in a field initializer.
-    if (Flixel.autoPause && !this.autoPaused && isMediaPlaying()) {
-      pauseMedia();
-      this.autoPaused = true;
-    }
-  };
-
-  /** Resumes the video when focus returns, undoing {@link #onWindowUnfocused}. */
-  private final SignalHandler<Void> onWindowFocused = data -> {
-    if (this.autoPaused) {
-      this.autoPaused = false;
-      resumeMedia();
-    }
-  };
 
   /** World X position of the top-left corner in view coordinates. */
   public float x;
@@ -143,11 +114,20 @@ public abstract class FlixelVideo extends FlixelBasic {
   /** Vertical parallax factor, same contract as sprites ({@code 1} = follows the camera). */
   public float scrollY = 1f;
 
+  @NotNull
+  private final FlixelVideoPlayer player;
+
+  @NotNull
+  private FlixelVideoQuality quality = FlixelVideoQuality.FULL;
+
   /**
-   * Set when this video was paused automatically (by the focus hook or a platform-specific
-   * focus event) so it can be correctly resumed when the application returns to the foreground.
+   * Pauses the video when the window loses focus (or the app is backgrounded), so it lines up with
+   * the framework pausing audio. Kept as a field so it can be unregistered in {@link #destroy()}.
    */
-  protected boolean autoPaused;
+  private final SignalHandler<Void> onWindowUnfocused;
+
+  /** Resumes the video when focus returns, undoing {@link #onWindowUnfocused}. */
+  private final SignalHandler<Void> onWindowFocused;
 
   /** When {@code true}, {@link #destroy()} is called automatically when playback completes. */
   private boolean autoDestroy;
@@ -155,142 +135,40 @@ public abstract class FlixelVideo extends FlixelBasic {
   /** Guards {@link #onComplete} so the end of a video is only announced once. */
   private boolean completed;
 
-  /** Set once the first frame has been uploaded, so drawing waits for real pixels. */
-  private boolean frameReady;
-
-  /** Starts the underlying media player. */
-  protected abstract void playMedia();
-
-  /** Pauses the underlying media player at the current position. */
-  protected abstract void pauseMedia();
-
-  /** Resumes the underlying media player after a pause. */
-  protected abstract void resumeMedia();
-
-  /** Stops the underlying media player and resets its position. */
-  protected abstract void stopMedia();
+  /**
+   * Set when this video was paused automatically by the focus hook so it can be correctly resumed
+   * when the application returns to the foreground.
+   */
+  private boolean autoPaused;
 
   /**
-   * Returns whether the underlying player is actively playing.
+   * Creates a video that is driven by the given platform player.
    *
-   * @return {@code true} while playing.
+   * <p>Most games should call {@link FlixelVideos#create(FlixelFile)} instead, which builds the
+   * right player for the current platform.
+   *
+   * @param player The platform player this video controls and draws; the video destroys it in
+   *     {@link #destroy()}.
+   * @throws IllegalArgumentException If {@code player} is {@code null}.
    */
-  protected abstract boolean isMediaPlaying();
-
-  /**
-   * Returns whether the underlying player has decoded its first frame.
-   *
-   * @return {@code true} once the stream is ready.
-   */
-  protected abstract boolean isMediaReady();
-
-  /**
-   * Returns whether a non-looping stream has reached its end.
-   *
-   * @return {@code true} once the stream finished playing.
-   */
-  protected abstract boolean isMediaEnded();
-
-  /**
-   * Returns the current playback position in milliseconds.
-   *
-   * @return Playback position in milliseconds.
-   */
-  protected abstract float getMediaTime();
-
-  /**
-   * Seeks to the given playback position.
-   *
-   * @param timeMs Target position in milliseconds.
-   */
-  protected abstract void setMediaTime(float timeMs);
-
-  /**
-   * Returns the total duration of the media.
-   *
-   * @return Duration in milliseconds, or {@code 0} if not yet known.
-   */
-  protected abstract float getMediaLength();
-
-  /**
-   * Returns the current playback speed multiplier.
-   *
-   * @return Speed multiplier; {@code 1} is normal.
-   */
-  protected abstract float getMediaRate();
-
-  /**
-   * Sets the playback speed multiplier.
-   *
-   * @param rate Speed multiplier; must be greater than {@code 0}.
-   */
-  protected abstract void setMediaRate(float rate);
-
-  /**
-   * Returns whether the media is set to loop automatically.
-   *
-   * @return {@code true} if looping is enabled.
-   */
-  protected abstract boolean isMediaLooped();
-
-  /**
-   * Enables or disables automatic looping.
-   *
-   * @param looped {@code true} to loop, {@code false} to play once.
-   */
-  protected abstract void setMediaLooped(boolean looped);
-
-  /**
-   * Returns the current audio volume.
-   *
-   * @return Volume in {@code [0, 1]}.
-   */
-  protected abstract float getMediaVolume();
-
-  /**
-   * Sets the audio volume.
-   *
-   * @param volume Volume in {@code [0, 1]}; implementations should clamp out-of-range values.
-   */
-  protected abstract void setMediaVolume(float volume);
-
-  /**
-   * Applies a decode quality preset to the underlying player.
-   *
-   * @param quality The preset to apply.
-   */
-  protected abstract void applyMediaQuality(@NotNull FlixelVideoQuality quality);
-
-  /**
-   * Returns the decoded frame width in pixels.
-   *
-   * @return Frame width, or {@code 0} while not yet ready.
-   */
-  protected abstract int getMediaVideoWidth();
-
-  /**
-   * Returns the decoded frame height in pixels.
-   *
-   * @return Frame height, or {@code 0} while not yet ready.
-   */
-  protected abstract int getMediaVideoHeight();
-
-  /**
-   * Per-frame pump; advances player state and pushes the newest decoded frame.
-   *
-   * <p>Must be called on the render thread. {@link #update(float)} calls this automatically after
-   * the standard lifecycle checks. When a new frame has been decoded, the backend copies its RGBA
-   * pixels into a reusable {@link FlixelImage} and hands it to {@link #updateFrame(FlixelImage)}.
-   *
-   * @param elapsed Seconds since the last frame.
-   */
-  protected abstract void updateMedia(float elapsed);
-
-  /** Releases all native resources held by this backend. */
-  protected abstract void disposeMedia();
-
-  protected FlixelVideo() {
+  public FlixelVideo(@NotNull FlixelVideoPlayer player) {
     super();
+    if (player == null) {
+      throw new IllegalArgumentException("Video player cannot be null.");
+    }
+    this.player = player;
+    onWindowUnfocused = data -> {
+      if (Flixel.autoPause && !autoPaused && player.isPlaying()) {
+        player.pause();
+        autoPaused = true;
+      }
+    };
+    onWindowFocused = data -> {
+      if (autoPaused) {
+        autoPaused = false;
+        player.resume();
+      }
+    };
     Flixel.Signals.windowUnfocused.add(onWindowUnfocused);
     Flixel.Signals.windowFocused.add(onWindowFocused);
   }
@@ -301,7 +179,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo play() {
+  public FlixelVideo play() {
     return play(true, 0f);
   }
 
@@ -312,7 +190,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo play(boolean forceRestart) {
+  public FlixelVideo play(boolean forceRestart) {
     return play(forceRestart, 0f);
   }
 
@@ -324,11 +202,11 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo play(boolean forceRestart, float startTimeMs) {
+  public FlixelVideo play(boolean forceRestart, float startTimeMs) {
     completed = false;
-    playMedia();
+    player.play();
     if (forceRestart) {
-      setMediaTime(startTimeMs);
+      player.setTime(startTimeMs);
     }
     onPlay.dispatch();
     return this;
@@ -340,8 +218,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo pause() {
-    pauseMedia();
+  public FlixelVideo pause() {
+    player.pause();
     onPause.dispatch();
     return this;
   }
@@ -352,8 +230,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo resume() {
-    resumeMedia();
+  public FlixelVideo resume() {
+    player.resume();
     onResume.dispatch();
     return this;
   }
@@ -364,9 +242,9 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo stop() {
+  public FlixelVideo stop() {
     completed = false;
-    stopMedia();
+    player.stop();
     return this;
   }
 
@@ -375,8 +253,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return {@code true} if the video is actively playing.
    */
-  public final boolean isPlaying() {
-    return isMediaPlaying();
+  public boolean isPlaying() {
+    return player.isPlaying();
   }
 
   /**
@@ -387,8 +265,49 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return {@code true} once the video is ready to display.
    */
-  public final boolean isReady() {
-    return isMediaReady();
+  public boolean isReady() {
+    return player.isReady();
+  }
+
+  /**
+   * Centers this video on the screen on both axes.
+   *
+   * <p>The centering uses the drawn size (see {@link #getDrawWidth()}). Before the first frame
+   * arrives the video size is {@code 0}, so a video drawn at its native size should be centered
+   * again once {@link #isReady()} is {@code true} (or simply every frame).
+   *
+   * @return {@code this} for chaining.
+   */
+  @NotNull
+  public FlixelVideo screenCenter() {
+    return screenCenter(FlixelAxes.XY);
+  }
+
+  /**
+   * Centers this video on the screen along the given axes.
+   *
+   * <p>The centering uses the drawn size (see {@link #getDrawWidth()}). Before the first frame
+   * arrives the video size is {@code 0}, so a video drawn at its native size should be centered
+   * again once {@link #isReady()} is {@code true} (or simply every frame).
+   *
+   * @param axes The axes to center on.
+   * @return {@code this} for chaining.
+   */
+  @NotNull
+  public FlixelVideo screenCenter(@NotNull FlixelAxes axes) {
+    float halfWidth = getDrawWidth() / 2f;
+    float halfHeight = getDrawHeight() / 2f;
+    float halfViewWidth = Flixel.getVisibleWidth() / 2f;
+    float halfViewHeight = Flixel.getVisibleHeight() / 2f;
+    switch (axes) {
+      case X -> x = halfViewWidth - halfWidth;
+      case Y -> y = halfViewHeight - halfHeight;
+      case XY -> {
+        x = halfViewWidth - halfWidth;
+        y = halfViewHeight - halfHeight;
+      }
+    }
+    return this;
   }
 
   @Override
@@ -397,9 +316,9 @@ public abstract class FlixelVideo extends FlixelBasic {
       return;
     }
 
-    updateMedia(elapsed);
+    player.update(elapsed);
 
-    if (!completed && isMediaEnded() && !isLooped()) {
+    if (!completed && player.isEnded() && !player.isLooped()) {
       completed = true;
       onComplete.dispatch();
       if (autoDestroy) {
@@ -410,18 +329,18 @@ public abstract class FlixelVideo extends FlixelBasic {
 
   @Override
   public void draw(@NotNull FlixelBatch batch) {
-    if (!visible || !exists || !frameReady) {
+    if (!visible || !exists || !player.isReady()) {
       return;
     }
-    FlixelTexture tex = texture;
+    FlixelTexture tex = player.getFrame();
     if (tex == null || !isOnDrawCamera()) {
       return;
     }
 
-    int videoW = getMediaVideoWidth();
-    int videoH = getMediaVideoHeight();
-    float drawW = width > 0f ? width : videoW;
-    float drawH = height > 0f ? height : videoH;
+    int videoW = player.getFrameWidth();
+    int videoH = player.getFrameHeight();
+    float drawW = getDrawWidth();
+    float drawH = getDrawHeight();
     if (drawW <= 0f || drawH <= 0f || videoW <= 0 || videoH <= 0) {
       return;
     }
@@ -452,12 +371,7 @@ public abstract class FlixelVideo extends FlixelBasic {
     onPause.clear();
     onResume.clear();
     onComplete.clear();
-    disposeMedia();
-    if (texture != null) {
-      texture.destroy();
-      texture = null;
-    }
-    frameReady = false;
+    player.destroy();
     quality = FlixelVideoQuality.FULL;
     x = 0f;
     y = 0f;
@@ -471,67 +385,31 @@ public abstract class FlixelVideo extends FlixelBasic {
   }
 
   /**
-   * Creates the GPU texture used to hold decoded video frames.
+   * Returns the platform player that backs this video.
    *
-   * <p>The default creates a blank, updateable texture via
-   * {@link FlixelGraphicsManager#createTexture(int, int)} and marks it for smooth (linear)
-   * filtering. Backends that need a specialized texture type (for example, an HTML5 backend
-   * that uploads frames through a DOM element source rather than a Java pixel copy) can override
-   * this to return their own implementation.
+   * <p>Meant for advanced use, such as reaching a backend-specific feature. Prefer the methods on
+   * this class for everything else; in particular, do not call {@link FlixelVideoPlayer#destroy()}
+   * yourself, use {@link #destroy()} instead.
    *
-   * @param width Texture width in pixels.
-   * @param height Texture height in pixels.
-   * @return A new, updateable frame texture; never {@code null}.
+   * @return The player; never {@code null}.
    */
   @NotNull
-  protected FlixelTexture createFrameTexture(int width, int height) {
-    FlixelTexture tex = Flixel.graphics.createTexture(width, height);
-    tex.setSmooth(true);
-    return tex;
-  }
-
-  /**
-   * Uploads the newest decoded frame into the reusable frame texture.
-   *
-   * <p>Backends call this from {@link #updateMedia(float)} on the render thread whenever a fresh
-   * frame is ready. The first call, and any call whose pixel size differs from the current texture,
-   * creates a new dynamic texture via {@link #createFrameTexture(int, int)}; every other call
-   * scrubs the existing texture's pixels in place. This is the "reuse one texture, rewrite its
-   * pixels" path, kept here so every backend shares it: a backend only has to decode RGBA into a
-   * {@link FlixelImage} (or set up a direct pixel source), never manage a GPU texture itself.
-   *
-   * @param image The freshly decoded RGBA pixels; owned by the backend and reused between frames.
-   */
-  protected final void updateFrame(@NotNull FlixelImage image) {
-    int w = image.getWidth();
-    int h = image.getHeight();
-    if (w <= 0 || h <= 0) {
-      return;
-    }
-    FlixelTexture current = texture;
-    if (current == null || current.getWidth() != w || current.getHeight() != h) {
-      if (current != null) {
-        current.destroy();
-      }
-      current = createFrameTexture(w, h);
-      texture = current;
-    }
-    current.update(0, 0, image);
-    frameReady = true;
+  public FlixelVideoPlayer getPlayer() {
+    return player;
   }
 
   /**
    * Returns the texture that holds the current video frame.
    *
    * <p>Useful when you want to feed the video into your own drawing code instead of
-   * relying on the default draw. The video owns this texture; do not destroy it
+   * relying on the default draw. The player owns this texture; do not destroy it
    * yourself.
    *
    * @return The frame texture, or {@code null} before the first frame arrives.
    */
   @Nullable
-  public final FlixelTexture getTexture() {
-    return frameReady ? texture : null;
+  public FlixelTexture getTexture() {
+    return player.isReady() ? player.getFrame() : null;
   }
 
   /**
@@ -539,8 +417,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return Playback position in milliseconds.
    */
-  public final float getTime() {
-    return getMediaTime();
+  public float getTime() {
+    return player.getTime();
   }
 
   /**
@@ -550,9 +428,9 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo setTime(float timeMs) {
+  public FlixelVideo setTime(float timeMs) {
     completed = false;
-    setMediaTime(timeMs);
+    player.setTime(timeMs);
     return this;
   }
 
@@ -561,8 +439,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return Duration in milliseconds, or {@code 0} if not yet known.
    */
-  public final float getLength() {
-    return getMediaLength();
+  public float getLength() {
+    return player.getLength();
   }
 
   /**
@@ -570,8 +448,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return Speed multiplier; {@code 1} is normal speed.
    */
-  public final float getRate() {
-    return getMediaRate();
+  public float getRate() {
+    return player.getRate();
   }
 
   /**
@@ -582,8 +460,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo setRate(float rate) {
-    setMediaRate(rate);
+  public FlixelVideo setRate(float rate) {
+    player.setRate(rate);
     return this;
   }
 
@@ -592,8 +470,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return {@code true} if looping is enabled.
    */
-  public final boolean isLooped() {
-    return isMediaLooped();
+  public boolean isLooped() {
+    return player.isLooped();
   }
 
   /**
@@ -603,8 +481,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo setLooped(boolean looped) {
-    setMediaLooped(looped);
+  public FlixelVideo setLooped(boolean looped) {
+    player.setLooped(looped);
     return this;
   }
 
@@ -613,8 +491,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return Volume in {@code [0, 1]}.
    */
-  public final float getVolume() {
-    return getMediaVolume();
+  public float getVolume() {
+    return player.getVolume();
   }
 
   /**
@@ -624,8 +502,8 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo setVolume(float volume) {
-    setMediaVolume(volume);
+  public FlixelVideo setVolume(float volume) {
+    player.setVolume(volume);
     return this;
   }
 
@@ -635,46 +513,54 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return The active quality preset.
    */
   @NotNull
-  public final FlixelVideoQuality getQuality() {
+  public FlixelVideoQuality getQuality() {
     return quality;
   }
 
   /**
    * Sets the decode quality preset.
    *
-   * <p>On the web the change applies immediately. On desktop the decoder pipeline is
-   * rebuilt, so the change takes effect when playback starts or restarts; the desktop
-   * backend restarts a playing video automatically and seeks back to where it was.
+   * <p>How quickly the change applies depends on the platform backend. On the web it applies
+   * immediately. On desktop the decoder pipeline is rebuilt, so the change takes effect when
+   * playback starts or restarts; the desktop backend restarts a playing video automatically and
+   * seeks back to where it was.
    *
    * @param quality The preset to apply (must not be {@code null}).
    * @return {@code this} for chaining.
+   * @throws IllegalArgumentException If {@code quality} is {@code null}.
    */
   @NotNull
-  public final FlixelVideo setQuality(@NotNull FlixelVideoQuality quality) {
+  public FlixelVideo setQuality(@NotNull FlixelVideoQuality quality) {
     if (quality == null) {
       throw new IllegalArgumentException("Video quality cannot be null.");
     }
     this.quality = quality;
-    applyMediaQuality(quality);
+    player.setQuality(quality);
     return this;
   }
 
   /**
-   * Returns the width of the decoded video frame in pixels.
+   * Returns the native width of the video in pixels.
    *
-   * @return Decoded frame width, or {@code 0} while the video is not yet ready.
+   * <p>This is the resolution of the source file and does not change with the
+   * {@link #setQuality(FlixelVideoQuality) quality}.
+   *
+   * @return Native video width, or {@code 0} while the video is not yet ready.
    */
-  public final int getVideoWidth() {
-    return getMediaVideoWidth();
+  public int getVideoWidth() {
+    return player.getVideoWidth();
   }
 
   /**
-   * Returns the height of the decoded video frame in pixels.
+   * Returns the native height of the video in pixels.
    *
-   * @return Decoded frame height, or {@code 0} while the video is not yet ready.
+   * <p>This is the resolution of the source file and does not change with the
+   * {@link #setQuality(FlixelVideoQuality) quality}.
+   *
+   * @return Native video height, or {@code 0} while the video is not yet ready.
    */
-  public final int getVideoHeight() {
-    return getMediaVideoHeight();
+  public int getVideoHeight() {
+    return player.getVideoHeight();
   }
 
   /**
@@ -682,7 +568,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return {@code true} if auto-destroy is enabled.
    */
-  public final boolean isAutoDestroy() {
+  public boolean isAutoDestroy() {
     return autoDestroy;
   }
 
@@ -693,7 +579,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo setAutoDestroy(boolean autoDestroy) {
+  public FlixelVideo setAutoDestroy(boolean autoDestroy) {
     this.autoDestroy = autoDestroy;
     return this;
   }
@@ -703,7 +589,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return World X position.
    */
-  public final float getX() {
+  public float getX() {
     return x;
   }
 
@@ -712,7 +598,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return World Y position.
    */
-  public final float getY() {
+  public float getY() {
     return y;
   }
 
@@ -724,7 +610,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo setPosition(float x, float y) {
+  public FlixelVideo setPosition(float x, float y) {
     this.x = x;
     this.y = y;
     return this;
@@ -735,7 +621,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return Drawn width in pixels.
    */
-  public final float getWidth() {
+  public float getWidth() {
     return width;
   }
 
@@ -744,8 +630,28 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return Drawn height in pixels.
    */
-  public final float getHeight() {
+  public float getHeight() {
     return height;
+  }
+
+  /**
+   * Returns the width the video is actually drawn at.
+   *
+   * @return {@link #width} if it is greater than {@code 0}, otherwise the native video width
+   *     (which is {@code 0} until the video is ready).
+   */
+  public float getDrawWidth() {
+    return width > 0f ? width : player.getVideoWidth();
+  }
+
+  /**
+   * Returns the height the video is actually drawn at.
+   *
+   * @return {@link #height} if it is greater than {@code 0}, otherwise the native video height
+   *     (which is {@code 0} until the video is ready).
+   */
+  public float getDrawHeight() {
+    return height > 0f ? height : player.getVideoHeight();
   }
 
   /**
@@ -759,7 +665,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo setSize(float width, float height) {
+  public FlixelVideo setSize(float width, float height) {
     this.width = width;
     this.height = height;
     return this;
@@ -770,7 +676,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return Horizontal scroll factor.
    */
-  public final float getScrollX() {
+  public float getScrollX() {
     return scrollX;
   }
 
@@ -779,7 +685,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    *
    * @return Vertical scroll factor.
    */
-  public final float getScrollY() {
+  public float getScrollY() {
     return scrollY;
   }
 
@@ -792,7 +698,7 @@ public abstract class FlixelVideo extends FlixelBasic {
    * @return {@code this} for chaining.
    */
   @NotNull
-  public final FlixelVideo setScrollFactor(float scrollX, float scrollY) {
+  public FlixelVideo setScrollFactor(float scrollX, float scrollY) {
     this.scrollX = scrollX;
     this.scrollY = scrollY;
     return this;

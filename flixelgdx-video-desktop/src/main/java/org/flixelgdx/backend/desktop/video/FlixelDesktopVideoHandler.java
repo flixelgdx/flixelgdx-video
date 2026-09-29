@@ -28,9 +28,10 @@ import com.sun.jna.StringArray;
 
 import org.flixelgdx.Flixel;
 import org.flixelgdx.file.FlixelFile;
-import org.flixelgdx.video.FlixelUnavailableVideo;
+import org.flixelgdx.video.FlixelUnavailableVideoPlayer;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoFactory;
+import org.flixelgdx.video.FlixelVideoPlayer;
 import org.flixelgdx.video.FlixelVideos;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -41,6 +42,9 @@ import java.nio.file.Files;
 
 /**
  * Desktop video backend factory powered by libvlc.
+ *
+ * <p>It creates one {@link FlixelVlcPlayer} per video; {@link FlixelVideos#create(FlixelFile)}
+ * wraps the player in a {@link FlixelVideo}.
  *
  * <p>Install it once in your desktop launcher, before the game starts:
  *
@@ -57,7 +61,7 @@ import java.nio.file.Files;
  * and a single shared libvlc instance is created for the whole game.
  *
  * <p>When no working VLC can be found at all, videos are still created; they just
- * stay in a never-ready state (see {@link FlixelUnavailableVideo}) and the
+ * stay in a never-ready state (see {@link FlixelUnavailableVideoPlayer}) and the
  * reason is logged, so a missing decoder degrades the game instead of crashing it.
  *
  * <p>Automatic pause and resume on focus changes is handled by {@link FlixelVideo} itself through
@@ -93,30 +97,30 @@ public final class FlixelDesktopVideoHandler implements FlixelVideoFactory {
 
   @NotNull
   @Override
-  public FlixelVideo createVideo(@NotNull FlixelFile file) {
+  public FlixelVideoPlayer createPlayer(@NotNull FlixelFile file) {
     // A broken or missing VLC installation must not crash the game: the video
-    // degrades to a backend that is never ready, and the reason is logged loudly so
+    // degrades to a player that is never ready, and the reason is logged loudly so
     // the problem is diagnosable.
     if (unavailable) {
-      return new FlixelUnavailableVideo();
+      return new FlixelUnavailableVideoPlayer();
     }
     String path = resolvePath(file);
     if (path == null) {
       Flixel.error("FlixelVideo", "Video file could not be found: " + file.getPath());
-      return new FlixelUnavailableVideo();
+      return new FlixelUnavailableVideoPlayer();
     }
     try {
       ensureInstance();
     } catch (IllegalStateException | LinkageError error) {
       unavailable = true;
       Flixel.error("FlixelVideo", "Video playback is disabled for this session: " + error.getMessage());
-      return new FlixelUnavailableVideo();
+      return new FlixelUnavailableVideoPlayer();
     }
     try {
-      return new FlixelVlcVideo(instance, path);
+      return new FlixelVlcPlayer(instance, path);
     } catch (IllegalStateException error) {
       Flixel.error("FlixelVideo", error.getMessage());
-      return new FlixelUnavailableVideo();
+      return new FlixelUnavailableVideoPlayer();
     }
   }
 

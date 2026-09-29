@@ -24,9 +24,7 @@
 package org.flixelgdx.backend.html5.video;
 
 import org.flixelgdx.backend.html5.graphics.FlixelWebGlTexture;
-import org.flixelgdx.graphics.FlixelImage;
 import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Nullable;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.JSObject;
 import org.teavm.jso.webgl.WebGLRenderingContext;
@@ -36,23 +34,19 @@ import org.teavm.jso.webgl.WebGLTexture;
  * A frame texture for HTML5 video that uploads pixels directly from a DOM element.
  *
  * <p>The standard {@link FlixelWebGlTexture#update} path copies pixels through Java: it reads
- * {@code getImageData} into a Java {@code byte[]}, boxes that into a {@code Uint8Array}, then
- * calls {@code texSubImage2D}. For video frames, that round trip allocates on every frame and
- * taxes the garbage collector.
+ * bytes into a Java {@code byte[]}, boxes that into a {@code Uint8Array}, then calls
+ * {@code texSubImage2D}. For video frames, that round trip allocates on every frame and taxes the
+ * garbage collector.
  *
- * <p>This subclass short-circuits it. Before {@link FlixelHtml5Video} calls
- * {@link #update}, it calls {@link #setDirectSource} with the raw DOM element to use as the pixel
- * source: the {@code <video>} element for full-quality playback, or the offscreen {@code <canvas>}
- * element for quality-scaled playback. When a source is pending, {@link #update} calls
- * {@code texSubImage2D} with that element directly, which the browser handles without any CPU
- * round-trip or Java-side allocation.
+ * <p>This subclass adds {@link #uploadFrom(JSObject)}, which hands a DOM element straight to
+ * {@code texSubImage2D}: the {@code <video>} element for full-quality playback, or the offscreen
+ * {@code <canvas>} element for quality-scaled playback. The browser handles that without any CPU
+ * round-trip or Java-side allocation. It still extends {@link FlixelWebGlTexture} because the
+ * framework's WebGL batch only accepts that type as a drawable texture.
  */
 public final class FlixelVideoWebGlTexture extends FlixelWebGlTexture {
 
   private final WebGLRenderingContext gl;
-
-  @Nullable
-  private JSObject pendingSource;
 
   /**
    * Creates a blank, updateable frame texture.
@@ -67,45 +61,18 @@ public final class FlixelVideoWebGlTexture extends FlixelWebGlTexture {
   }
 
   /**
-   * Sets the DOM element whose pixels should be uploaded on the next {@link #update} call.
+   * Binds this texture and uploads the given DOM element (video or canvas) as its pixels.
    *
-   * <p>Pass the {@code <video>} element for full-quality frames, or the offscreen
-   * {@code <canvas>} element for quality-scaled frames. The reference is consumed and cleared
-   * after the first {@link #update} call that follows.
+   * <p>The browser reads the element's current displayed frame at its natural dimensions, so the
+   * element must match this texture's size. No Java-side copy or typed-array allocation occurs:
+   * the pixel data travels from the DOM element straight to the GPU.
    *
-   * @param source The DOM element to use as the pixel source; {@code null} clears any pending
-   *     source and falls back to the normal Java pixel-copy path.
+   * @param source The {@code <video>} or {@code <canvas>} element to read pixels from.
    */
-  public void setDirectSource(@Nullable JSObject source) {
-    pendingSource = source;
+  public void uploadFrom(@NotNull JSObject source) {
+    jsTexSubImage2DFromSource(gl, getGlTexture(), source);
   }
 
-  /**
-   * Uploads pixels either from a pending DOM source or through the standard Java pixel-copy path.
-   *
-   * <p>If a source was registered with {@link #setDirectSource}, it is consumed here and
-   * passed directly to {@code texSubImage2D}; the {@code image} parameter is only used for
-   * its dimensions in that case. If no source is pending, the call delegates to the parent
-   * implementation, which reads RGBA bytes out of {@code image}.
-   */
-  @Override
-  public void update(int x, int y, @NotNull FlixelImage image) {
-    JSObject source = pendingSource;
-    if (source != null) {
-      pendingSource = null;
-      jsTexSubImage2DFromSource(gl, getGlTexture(), source);
-    } else {
-      super.update(x, y, image);
-    }
-  }
-
-  /**
-   * Binds the texture and uploads the given DOM element (video or canvas) as its pixels.
-   *
-   * <p>The browser reads the element's current displayed frame at its natural dimensions.
-   * No Java-side copy or typed-array allocation occurs: the pixel data travels from the DOM
-   * element straight to the GPU.
-   */
   @JSBody(params = { "gl", "tex", "src" }, script = "gl.bindTexture(gl.TEXTURE_2D, tex);"
       + "gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, gl.RGBA, gl.UNSIGNED_BYTE, src);")
   private static native void jsTexSubImage2DFromSource(WebGLRenderingContext gl, WebGLTexture tex,

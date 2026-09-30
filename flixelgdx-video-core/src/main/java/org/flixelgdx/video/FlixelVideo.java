@@ -31,8 +31,8 @@ import org.flixelgdx.file.FlixelFile;
 import org.flixelgdx.graphics.FlixelBatch;
 import org.flixelgdx.graphics.FlixelTexture;
 import org.flixelgdx.util.FlixelAxes;
-import org.flixelgdx.util.signal.FlixelSignal;
-import org.flixelgdx.util.signal.FlixelSignal.SignalHandler;
+import org.flixelgdx.signal.FlixelSignal;
+import org.flixelgdx.signal.FlixelSignal.SignalHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 

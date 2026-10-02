@@ -28,6 +28,7 @@ import com.sun.jna.Native;
 import com.sun.jna.NativeLibrary;
 import com.sun.jna.Pointer;
 
+import org.flixelgdx.collections.FlixelArray;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -39,9 +40,7 @@ import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
 import java.util.Enumeration;
-import java.util.List;
 import java.util.Locale;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
@@ -110,7 +109,7 @@ final class FlixelVlcDiscovery {
    */
   @NotNull
   static NativeLibrary load() {
-    List<String> attempts = new ArrayList<>();
+    FlixelArray<String> attempts = new FlixelArray<>();
 
     String explicit = System.getProperty(PATH_PROPERTY);
     if (explicit != null && !explicit.isBlank()) {
@@ -159,7 +158,7 @@ final class FlixelVlcDiscovery {
    * @return The loaded library, or {@code null} if this directory does not work.
    */
   @Nullable
-  private static NativeLibrary tryDirectory(@NotNull File dir, @NotNull List<String> attempts) {
+  private static NativeLibrary tryDirectory(@NotNull File dir, @NotNull FlixelArray<String> attempts) {
     if (!dir.isDirectory()) {
       return null;
     }
@@ -217,7 +216,7 @@ final class FlixelVlcDiscovery {
 
   /** Extracts classpath-bundled natives (if present) to a per-user cache and probes them. */
   @Nullable
-  private static NativeLibrary tryBundled(@NotNull List<String> attempts) {
+  private static NativeLibrary tryBundled(@NotNull FlixelArray<String> attempts) {
     String platform = platformDirectory();
     String root = RESOURCE_ROOT + platform + "/";
     URL marker = FlixelVlcDiscovery.class.getClassLoader().getResource(root);
@@ -242,7 +241,7 @@ final class FlixelVlcDiscovery {
 
   /** Tries well-known system installation locations for the current OS. */
   @Nullable
-  private static NativeLibrary trySystem(@NotNull List<String> attempts) {
+  private static NativeLibrary trySystem(@NotNull FlixelArray<String> attempts) {
     if (isWindows()) {
       String[] roots = {
           System.getenv("ProgramFiles"),
@@ -455,7 +454,13 @@ final class FlixelVlcDiscovery {
     return System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
   }
 
-  /** Minimal interface-mapped binding used only to probe candidates before committing. */
+  /**
+   * Minimal interface-mapped binding used only to probe candidates before committing.
+   *
+   * <p>JNA binds each method to the exported C symbol of the same name, so the snake_case names
+   * must stay and the {@code MethodName} check is suppressed.
+   */
+  @SuppressWarnings("checkstyle:MethodName")
   private interface ProbeLibrary extends Library {
 
     Pointer libvlc_new(int argc, Pointer argv);
@@ -473,7 +478,13 @@ final class FlixelVlcDiscovery {
     int unsetenv(String name);
   }
 
-  /** Binding for the Windows C runtime equivalent of setenv. */
+  /**
+   * Binding for the Windows C runtime equivalent of setenv.
+   *
+   * <p>JNA binds the method to the exported C symbol {@code _putenv_s}, so the name must stay and
+   * the {@code MethodName} check is suppressed.
+   */
+  @SuppressWarnings("checkstyle:MethodName")
   private interface WindowsCRuntime extends Library {
 
     WindowsCRuntime INSTANCE = Native.load("msvcrt", WindowsCRuntime.class);

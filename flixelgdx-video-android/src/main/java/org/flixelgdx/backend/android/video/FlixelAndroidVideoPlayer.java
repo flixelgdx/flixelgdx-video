@@ -35,6 +35,7 @@ import android.view.Surface;
 import org.flixelgdx.Flixel;
 import org.flixelgdx.graphics.FlixelRenderTarget;
 import org.flixelgdx.graphics.FlixelTexture;
+import org.flixelgdx.logging.FlixelLogger;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoPlayer;
 import org.flixelgdx.video.FlixelVideoQuality;
@@ -72,6 +73,8 @@ import java.nio.FloatBuffer;
  * If the context is ever destroyed, create a new video.
  */
 public final class FlixelAndroidVideoPlayer implements FlixelVideoPlayer {
+
+  private static final FlixelLogger LOG = Flixel.log.tagged("FlixelVideo");
 
   /**
    * Full-screen quad as a triangle strip, four vertices of (x, y, s, t).
@@ -593,15 +596,14 @@ public final class FlixelAndroidVideoPlayer implements FlixelVideoPlayer {
     }
     failureLogged = true;
     wantPlaying = false;
-    Flixel.error("FlixelVideo", "MediaPlayer reported an error (what=" + errorWhat + ", extra="
-        + errorExtra + "); the video was stopped.");
+    LOG.error("MediaPlayer reported an error (what={}, extra={}); the video was stopped.", errorWhat, errorExtra);
   }
 
   private void fail(@NotNull String message, @NotNull Throwable error) {
     failed = true;
     failureLogged = true;
     wantPlaying = false;
-    Flixel.error("FlixelVideo", message, error);
+    LOG.error("{}", message, error);
   }
 
   private void closeDescriptor() {
@@ -613,7 +615,7 @@ public final class FlixelAndroidVideoPlayer implements FlixelVideoPlayer {
     try {
       asset.close();
     } catch (IOException error) {
-      Flixel.warn("FlixelVideo", "Could not close the video asset: " + error.getMessage());
+      LOG.warn("Could not close the video asset: {}", error.getMessage());
     }
   }
 

@@ -28,6 +28,7 @@ import android.content.res.AssetFileDescriptor;
 
 import org.flixelgdx.Flixel;
 import org.flixelgdx.file.FlixelFile;
+import org.flixelgdx.logging.FlixelLogger;
 import org.flixelgdx.video.FlixelUnavailableVideoPlayer;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoFactory;
@@ -90,7 +91,7 @@ import java.io.IOException;
  */
 public final class FlixelAndroidVideoHandler implements FlixelVideoFactory {
 
-  private static final String TAG = "FlixelVideo";
+  private static final FlixelLogger LOG = Flixel.log.tagged("FlixelVideo");
 
   /** Application context used to reach the APK assets; set by {@link #install(Context)}. */
   @Nullable
@@ -114,14 +115,14 @@ public final class FlixelAndroidVideoHandler implements FlixelVideoFactory {
   public FlixelVideoPlayer createPlayer(@NotNull FlixelFile file) {
     Context context = appContext;
     if (context == null) {
-      Flixel.error(TAG, "FlixelAndroidVideoHandler.install(context) has not been called.");
+      LOG.error("FlixelAndroidVideoHandler.install(context) has not been called.");
       return new FlixelUnavailableVideoPlayer();
     }
 
     Object handle = file.getNativeHandle();
     if (handle instanceof File onDisk) {
       if (!onDisk.isFile()) {
-        Flixel.error(TAG, "Video file could not be found: " + file.getPath());
+        LOG.error("Video file could not be found: {}", file.getPath());
         return new FlixelUnavailableVideoPlayer();
       }
       return new FlixelAndroidVideoPlayer(onDisk.getAbsolutePath());
@@ -136,12 +137,11 @@ public final class FlixelAndroidVideoHandler implements FlixelVideoFactory {
       return new FlixelAndroidVideoPlayer(descriptor);
     } catch (IOException error) {
       if (!file.exists()) {
-        Flixel.error(TAG, "Video file could not be found: " + file.getPath());
+        LOG.error("Video file could not be found: {}", file.getPath());
       } else {
-        Flixel.error(TAG, "Video '" + file.getPath() + "' cannot be opened as an uncompressed APK "
-            + "asset. If the file is compressed in the APK, store it uncompressed with "
-            + "androidResources { noCompress += \"" + extensionOf(file.getName()) + "\" } in your "
-            + "game module's build.gradle.kts.", error);
+        LOG.error("Video '{}' cannot be opened as an uncompressed APK asset. If the file is compressed in "
+            + "the APK, store it uncompressed with androidResources { noCompress += \"{}\" } in your "
+            + "game module's build.gradle.kts.", file.getPath(), extensionOf(file.getName()), error);
       }
       return new FlixelUnavailableVideoPlayer();
     }

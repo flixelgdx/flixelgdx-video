@@ -1,0 +1,177 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+  FlixelGDX Checkstyle configuration.
+
+  Checks applied here complement Spotless (which owns formatting) and doclint (which owns
+  HTML validity and @link resolution in Javadoc). This file owns:
+    - semantic Javadoc completeness (missing docs on public API, tag quality)
+    - banned standard Java collection implementations in favor of FlixelGDX collections
+    - lightweight code-quality rules that are not covered by the formatter
+
+  Suppressions: gradle/checkstyle/suppressions.xml
+-->
+
+<module name="Checker">
+  <property name="severity" value="error"/>
+  <property name="fileExtensions" value="java"/>
+
+  <module name="SuppressionFilter">
+    <property name="file" value="${config_loc}/suppressions.xml"/>
+    <property name="optional" value="false"/>
+  </module>
+
+  <!-- Honors the @SuppressWarnings("checkstyle:CheckName") annotations collected by
+       SuppressWarningsHolder. -->
+  <module name="SuppressWarningsFilter"/>
+
+  <module name="TreeWalker">
+
+    <!-- Lets @SuppressWarnings("checkstyle:CheckName") silence a check for one declaration. -->
+    <module name="SuppressWarningsHolder"/>
+
+    <!-- Modifier keywords must appear in the order: public protected private abstract default
+         static final transient volatile synchronized native strictfp. -->
+    <module name="ModifierOrder"/>
+
+    <!-- Remove modifiers that are implied by context (public on interface methods,
+         final on static inner-interface fields, etc.). -->
+    <module name="RedundantModifier"/>
+
+    <!-- Every control-flow statement (if, else, for, while, do) must use braces.
+         Brace-less one-liners are easy to silently break during edits. -->
+    <module name="NeedBraces"/>
+
+    <!-- Long literals must use uppercase L (not l, which is indistinguishable from 1
+         in many fonts). -->
+    <module name="UpperEll"/>
+
+    <!-- One variable declaration per statement to keep diffs readable. -->
+    <module name="MultipleVariableDeclarations"/>
+
+    <!-- Standard Java naming conventions, using each check's built-in default format:
+         lowercase package names; UpperCamelCase for classes, interfaces, enums, and records;
+         lowerCamelCase for methods, fields, parameters, and local variables; UPPER_SNAKE_CASE for
+         static final constants; and a single capital letter for type parameters.
+         A static final field that holds a mutable object (a singleton such as Flixel.random, a
+         signal, or a private cache) is not a constant, so it keeps lowerCamelCase and opts out with
+         @SuppressWarnings("checkstyle:ConstantName") on that field. -->
+    <module name="PackageName"/>
+    <module name="TypeName"/>
+    <module name="MethodName"/>
+    <module name="MemberName"/>
+    <module name="StaticVariableName"/>
+    <module name="ConstantName"/>
+    <module name="ParameterName"/>
+    <module name="LambdaParameterName"/>
+    <module name="CatchParameterName"/>
+    <module name="LocalVariableName"/>
+    <module name="LocalFinalVariableName"/>
+    <module name="PatternVariableName"/>
+    <module name="RecordComponentName"/>
+    <module name="ClassTypeParameterName"/>
+    <module name="MethodTypeParameterName"/>
+    <module name="InterfaceTypeParameterName"/>
+    <module name="RecordTypeParameterName"/>
+
+    <!-- Switches must use arrow labels ("case X ->"), not legacy colon labels ("case X:").
+         Arrow labels cannot fall through by accident and work for both switch statements and
+         switch expressions. Colon labels are the only thing that creates a CASE_GROUP node. -->
+    <module name="MatchXpath">
+      <property name="id" value="legacySwitch"/>
+      <property name="query" value="//CASE_GROUP"/>
+      <message key="matchxpath.match"
+          value="Use arrow labels (case X -> ...) instead of legacy colon labels (case X:)."/>
+    </module>
+
+    <!-- Standard Java collection implementations allocate garbage and use more memory
+         than FlixelGDX's lean equivalents.
+
+         Note: java.util interfaces (List, Map, Collection) and utility classes (Arrays,
+         Collections, Objects) are not banned. -->
+    <module name="IllegalType">
+      <property name="illegalClassNames" value="
+        java.util.ArrayList,
+        java.util.HashMap,
+        java.util.HashSet,
+        java.util.LinkedList,
+        java.util.TreeMap,
+        java.util.TreeSet,
+        java.util.LinkedHashMap,
+        java.util.LinkedHashSet,
+        java.util.ArrayDeque,
+        java.util.Vector,
+        java.util.Stack,
+        java.util.Hashtable,
+        java.util.EnumMap,
+        java.util.EnumSet,
+        java.util.WeakHashMap,
+        java.util.IdentityHashMap"/>
+    </module>
+
+    <!-- IllegalType only catches banned collections used as declared types (variable, parameter,
+         return type). A bare instantiation like "new ArrayList<>()" with no LHS variable
+         declaration slips past it because there is no type-reference token in the AST.
+         This regex catches every "new <BannedType>(" pattern to close that gap. -->
+    <module name="RegexpSinglelineJava">
+      <property name="format" value="new\s+(ArrayList|HashMap|HashSet|LinkedList|TreeMap|TreeSet|LinkedHashMap|LinkedHashSet|ArrayDeque|Vector|Stack|Hashtable|EnumMap|EnumSet|WeakHashMap|IdentityHashMap)\s*[&lt;(]"/>
+      <property name="message" value="Do not instantiate standard Java collections; use FlixelGDX collections (FlixelArray, FlixelMap, etc.) instead."/>
+    </module>
+
+    <!-- Require a Javadoc comment on every public type (class, interface, enum, annotation). -->
+    <module name="MissingJavadocType">
+      <property name="scope" value="public"/>
+    </module>
+
+    <!-- Require a Javadoc comment on every public method. Simple getters and setters that
+         follow the JavaBeans naming convention are exempt. -->
+    <module name="MissingJavadocMethod">
+      <property name="scope" value="public"/>
+      <property name="allowMissingPropertyJavadoc" value="true"/>
+    </module>
+
+    <!-- Reject empty @param, @return, @throws, or @deprecated tag descriptions.
+         An empty tag conveys no information and is noise in the generated docs. -->
+    <module name="NonEmptyAtclauseDescription"/>
+
+    <!-- Enforce Javadoc tag order: @param, @return, @throws / @exception, @deprecated.
+         Consistent ordering makes it easy to scan docs for the information you need. -->
+    <module name="AtclauseOrder">
+      <property name="tagOrder" value="@param, @return, @throws, @exception, @deprecated"/>
+    </module>
+
+    <!-- The first sentence of every Javadoc comment must end with a period.
+         This matches the AGENTS.md rule: "Every doc comment should always start with
+         a single sentence." -->
+    <module name="SummaryJavadoc"/>
+
+    <!-- Every public method that has a Javadoc comment must include @param tags for each
+         parameter and a @return tag for non-void return types. This ensures API consumers
+         always know what to pass in and what to expect back. -->
+    <module name="JavadocMethod">
+      <property name="accessModifiers" value="public"/>
+    </module>
+
+    <!-- Javadoc @link tags must use the short class name with an import qualifier, not a
+         fully-qualified package path, so generated docs stay readable. -->
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="QualifiedJavadocLink"/>
+      <property name="format" value="\{@link\s+[a-z][a-zA-Z0-9]*\."/>
+      <property name="message" value="Use a short @link with an import qualifier instead of a fully-qualified name."/>
+    </module>
+
+    <!-- Comments and Javadoc must use American English spelling. This check catches the most common British
+         variants in Javadoc block-comment lines (starting with * or /**) and in single-line
+         // comments. Identifiers in code are not checked here; only documentation prose. -->
+    <module name="RegexpSinglelineJava">
+      <property name="id" value="AmericanEnglishInComments"/>
+      <property name="format" value="(^\s*(\*|\/\*\*?)|//).*(?i)\b(colour|behaviour|favour|neighbour|honour|labour|flavour|humour|centre|metre|fibre|theatre|litre|calibre|analyse|organise|recognise|realise|serialise|initialise|synchronise|minimise|maximise|optimise|specialise|customise|prioritise|generalise|normalise|utilise|characterise|parametrise|licence|defence|offence|pretence|travelled|labelled|cancelled|modelled|signalled|levelled|fuelled|jewellery|whilst|mould|grey\b)"/>
+      <property name="message" value="Use American English spelling in comments and Javadoc (e.g. 'color' not 'colour', 'initialize' not 'initialise')."/>
+    </module>
+
+  </module>
+
+</module>

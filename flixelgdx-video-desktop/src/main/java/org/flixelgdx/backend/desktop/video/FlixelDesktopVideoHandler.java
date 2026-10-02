@@ -28,6 +28,7 @@ import com.sun.jna.StringArray;
 
 import org.flixelgdx.Flixel;
 import org.flixelgdx.file.FlixelFile;
+import org.flixelgdx.logging.FlixelLogger;
 import org.flixelgdx.video.FlixelUnavailableVideoPlayer;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoFactory;
@@ -69,6 +70,8 @@ import java.nio.file.Files;
  */
 public final class FlixelDesktopVideoHandler implements FlixelVideoFactory {
 
+  private static final FlixelLogger LOG = Flixel.log.tagged("FlixelVideo");
+
   private static Pointer instance;
 
   /** Set after discovery fails once, so every later video degrades without re-probing. */
@@ -106,20 +109,20 @@ public final class FlixelDesktopVideoHandler implements FlixelVideoFactory {
     }
     String path = resolvePath(file);
     if (path == null) {
-      Flixel.error("FlixelVideo", "Video file could not be found: " + file.getPath());
+      LOG.error("Video file could not be found: {}", file.getPath());
       return new FlixelUnavailableVideoPlayer();
     }
     try {
       ensureInstance();
     } catch (IllegalStateException | LinkageError error) {
       unavailable = true;
-      Flixel.error("FlixelVideo", "Video playback is disabled for this session: " + error.getMessage());
+      LOG.error("Video playback is disabled for this session: {}", error.getMessage());
       return new FlixelUnavailableVideoPlayer();
     }
     try {
       return new FlixelVlcPlayer(instance, path);
     } catch (IllegalStateException error) {
-      Flixel.error("FlixelVideo", error.getMessage());
+      LOG.error(error.getMessage());
       return new FlixelUnavailableVideoPlayer();
     }
   }
@@ -168,7 +171,7 @@ public final class FlixelDesktopVideoHandler implements FlixelVideoFactory {
       Files.write(temp.toPath(), bytes);
       return temp.getAbsolutePath();
     } catch (IOException error) {
-      Flixel.error("FlixelVideo", "Could not extract video '" + file.getPath() + "': " + error.getMessage());
+      LOG.error("Could not extract video '{}': {}", file.getPath(), error.getMessage());
       return null;
     }
   }
@@ -188,7 +191,6 @@ public final class FlixelDesktopVideoHandler implements FlixelVideoFactory {
     instance = created;
     // A one-time confirmation of which libvlc actually satisfied the game, so a
     // "plugins cannot be found" report can be traced to the exact install that loaded.
-    Flixel.info("FlixelVideo", "libvlc " + LibVlc.libvlc_get_version()
-        + " initialized from " + FlixelVlcDiscovery.getLoadedFrom() + ".");
+    LOG.info("libvlc {} initialized from {}.", LibVlc.libvlc_get_version(), FlixelVlcDiscovery.getLoadedFrom());
   }
 }

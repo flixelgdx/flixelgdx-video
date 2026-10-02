@@ -33,6 +33,7 @@ import com.sun.jna.ptr.PointerByReference;
 import org.flixelgdx.Flixel;
 import org.flixelgdx.graphics.FlixelImage;
 import org.flixelgdx.graphics.FlixelTexture;
+import org.flixelgdx.logging.FlixelLogger;
 import org.flixelgdx.video.FlixelVideo;
 import org.flixelgdx.video.FlixelVideoCpuFrame;
 import org.flixelgdx.video.FlixelVideoPlayer;
@@ -64,6 +65,8 @@ import java.nio.ByteBuffer;
  * {@code bufferLock} plus a handful of volatile flags.
  */
 public final class FlixelVlcPlayer implements FlixelVideoPlayer {
+
+  private static final FlixelLogger LOG = Flixel.log.tagged("FlixelVideo");
 
   /** Shared initializer that keeps libvlc's native callback threads attached to the JVM as daemons. */
   private static final CallbackThreadInitializer THREAD_INIT = new CallbackThreadInitializer(true, false, "flixel-vlc");
@@ -346,7 +349,7 @@ public final class FlixelVlcPlayer implements FlixelVideoPlayer {
 
     if (playbackError) {
       playbackError = false;
-      Flixel.error("FlixelVideo", "libvlc reported a playback error; the video was stopped.");
+      LOG.error("libvlc reported a playback error; the video was stopped.");
     }
 
     if (endReached) {

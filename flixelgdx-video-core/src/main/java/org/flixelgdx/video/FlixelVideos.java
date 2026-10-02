@@ -48,7 +48,7 @@ import org.jetbrains.annotations.Nullable;
  * }</pre>
  *
  * <p>After that, creating a video anywhere in the game needs no further setup. Videos are located
- * through {@link org.flixelgdx.Flixel#files Flixel.files}, the same file seam the rest of the framework loads
+ * through {@link Flixel#files Flixel.files}, the same file seam the rest of the framework loads
  * assets through:
  *
  * <pre>{@code

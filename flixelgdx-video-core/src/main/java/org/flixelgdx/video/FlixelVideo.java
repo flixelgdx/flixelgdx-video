@@ -26,13 +26,14 @@ package org.flixelgdx.video;
 import org.flixelgdx.Flixel;
 import org.flixelgdx.FlixelBasic;
 import org.flixelgdx.FlixelCamera;
+import org.flixelgdx.FlixelState;
 import org.flixelgdx.audio.FlixelSound;
 import org.flixelgdx.file.FlixelFile;
 import org.flixelgdx.graphics.FlixelBatch;
 import org.flixelgdx.graphics.FlixelTexture;
-import org.flixelgdx.util.FlixelAxes;
 import org.flixelgdx.signal.FlixelSignal;
 import org.flixelgdx.signal.FlixelSignal.SignalHandler;
+import org.flixelgdx.util.FlixelAxes;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
@@ -41,7 +42,7 @@ import org.jetbrains.annotations.Nullable;
  *
  * <p>{@code FlixelVideo} extends {@link FlixelBasic}, so it carries the normal lifecycle
  * flags, can be pooled, and can be added straight to a
- * {@link org.flixelgdx.FlixelState FlixelState}. Draw order follows state member order:
+ * {@link FlixelState}. Draw order follows state member order:
  * a sprite added after the video renders on top of it, exactly as with two sprites.
  *
  * <p>This class is the game-facing half of a composition design. It does not decode anything

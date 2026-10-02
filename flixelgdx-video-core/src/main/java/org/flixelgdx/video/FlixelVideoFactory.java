@@ -23,6 +23,7 @@
  */
 package org.flixelgdx.video;
 
+import org.flixelgdx.Flixel;
 import org.flixelgdx.file.FlixelFile;
 import org.jetbrains.annotations.NotNull;
 
@@ -47,7 +48,7 @@ public interface FlixelVideoFactory {
    * If the native decoder cannot be set up, return a {@link FlixelUnavailableVideoPlayer} instead
    * of throwing so the game keeps running.
    *
-   * @param file The video file to open, obtained from {@link org.flixelgdx.Flixel#files}.
+   * @param file The video file to open, obtained from {@link Flixel#files}.
    * @return A new player instance; never {@code null}.
    */
   @NotNull

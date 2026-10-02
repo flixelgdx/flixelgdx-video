@@ -140,6 +140,7 @@ Run the same checks CI runs on every push:
 
 ```bash
 ./gradlew spotlessCheck   # formatting
+./gradlew checkstyleMain  # code quality and Javadoc completeness (config in gradle/checkstyle)
 ./gradlew javadocAll      # Javadoc with doclint on the published API modules
 ```
 
@@ -291,6 +292,14 @@ installing VLC on your machine is enough to see desktop video play.
 ### Spotless failures
 
 - **Fix**: run `./gradlew spotlessApply` and commit the reformatted files.
+
+### Checkstyle failures
+
+- **Fix**: read the violation printed by `./gradlew checkstyleMain` (it names the file, line, and
+  check) and fix the code. The rules live in `gradle/checkstyle/checkstyle.xml` and match the
+  framework's. For a case that is structurally impossible to fix, such as a native binding method
+  that must keep its C name, add `@SuppressWarnings("checkstyle:CheckName")` to that declaration
+  and explain why in its Javadoc.
 
 For anything not covered here, the framework's
 [COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/master/COMPILING.md#troubleshooting)

@@ -66,7 +66,7 @@ import java.nio.ByteBuffer;
  */
 public final class FlixelVlcPlayer implements FlixelVideoPlayer {
 
-  private static final FlixelLogger LOG = Flixel.log.tagged("FlixelVideo");
+  private static final FlixelLogger LOG = Flixel.log.tagged("Video");
 
   /** Shared initializer that keeps libvlc's native callback threads attached to the JVM as daemons. */
   private static final CallbackThreadInitializer THREAD_INIT = new CallbackThreadInitializer(true, false, "flixel-vlc");

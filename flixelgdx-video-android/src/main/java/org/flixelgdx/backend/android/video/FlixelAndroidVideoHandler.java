@@ -91,7 +91,7 @@ import java.io.IOException;
  */
 public final class FlixelAndroidVideoHandler implements FlixelVideoFactory {
 
-  private static final FlixelLogger LOG = Flixel.log.tagged("FlixelVideo");
+  private static final FlixelLogger LOG = Flixel.log.tagged("Video");
 
   /** Application context used to reach the APK assets; set by {@link #install(Context)}. */
   @Nullable

@@ -163,8 +163,9 @@ Before considering a coding task finished:
 
 1. Apply formatting: `./gradlew spotlessApply`
 2. Verify formatting: `./gradlew spotlessCheck`
-3. Verify Javadoc: `./gradlew javadocAll`
-4. Build all modules: `./gradlew assemble`
+3. Checkstyle: `./gradlew checkstyleMain`
+4. Verify Javadoc: `./gradlew javadocAll`
+5. Build all modules: `./gradlew assemble`
 
 Fix any failures before considering the task complete.
 

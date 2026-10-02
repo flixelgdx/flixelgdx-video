@@ -41,7 +41,13 @@ import com.sun.jna.ptr.PointerByReference;
  * <p>All callback interfaces are invoked from libvlc's own decoder threads, never from
  * the render thread. Implementations must therefore stay allocation-free and hand data
  * over through fields that the render thread polls (see {@code FlixelVlcPlayer}).
+ *
+ * <p>The native method names deliberately keep libvlc's snake_case C names (such as
+ * {@code libvlc_new}), because JNA direct mapping binds each method to the exported symbol of the
+ * same name. Renaming them would break the binding, so the {@code MethodName} check is suppressed
+ * for this class.
  */
+@SuppressWarnings("checkstyle:MethodName")
 final class LibVlc {
 
   /** libvlc_state_t: media player is actively playing. */

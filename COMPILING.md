@@ -156,10 +156,10 @@ Apply formatting fixes automatically before committing:
 
 CI compiles each platform backend on its own. You can reproduce any of them locally:
 
-| Platform | Command |
-|----------|---------|
-| **Desktop** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-desktop:assemble` |
-| **Web** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-html5:assemble` |
+| Platform    | Command                                                                                                                                                                                  |
+|-------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **Desktop** | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-desktop:assemble`                                                                                                             |
+| **Web**     | `./gradlew :flixelgdx-video-core:assemble :flixelgdx-video-html5:assemble`                                                                                                               |
 | **Android** | `./gradlew -PincludeAndroid=true :flixelgdx-video-core:assemble :flixelgdx-video-android:assembleRelease` (needs the Android SDK; add `--include-build ../flixelgdx` as described above) |
 
 ---

@@ -9,6 +9,8 @@
 plugins {
   eclipse
   idea
+  id("flixelgdx.spotless-android")
+  id("flixelgdx.checkstyle-android")
   // These plugins must be declared in the root classpath scope to prevent classloader conflicts
   // when convention plugins apply them to sibling subprojects. None of these are applied to the
   // root project itself; subprojects apply them via the flixelgdx.* convention plugins.

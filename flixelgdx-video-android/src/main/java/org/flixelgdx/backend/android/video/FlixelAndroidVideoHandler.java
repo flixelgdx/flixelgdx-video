@@ -23,9 +23,6 @@
  */
 package org.flixelgdx.backend.android.video;
 
-import android.content.Context;
-import android.content.res.AssetFileDescriptor;
-
 import org.flixelgdx.Flixel;
 import org.flixelgdx.file.FlixelFile;
 import org.flixelgdx.logging.FlixelLogger;
@@ -39,6 +36,9 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.File;
 import java.io.IOException;
+
+import android.content.Context;
+import android.content.res.AssetFileDescriptor;
 
 /**
  * Android video backend factory powered by the platform {@code MediaPlayer}.

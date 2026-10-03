@@ -23,15 +23,6 @@
  */
 package org.flixelgdx.backend.android.video;
 
-import android.content.res.AssetFileDescriptor;
-import android.graphics.SurfaceTexture;
-import android.media.MediaPlayer;
-import android.opengl.EGL14;
-import android.opengl.GLES11Ext;
-import android.opengl.GLES30;
-import android.os.Build;
-import android.view.Surface;
-
 import org.flixelgdx.Flixel;
 import org.flixelgdx.graphics.FlixelRenderTarget;
 import org.flixelgdx.graphics.FlixelTexture;
@@ -46,6 +37,15 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.FloatBuffer;
+
+import android.content.res.AssetFileDescriptor;
+import android.graphics.SurfaceTexture;
+import android.media.MediaPlayer;
+import android.opengl.EGL14;
+import android.opengl.GLES11Ext;
+import android.opengl.GLES30;
+import android.os.Build;
+import android.view.Surface;
 
 /**
  * Android video player that decodes with {@code MediaPlayer} and never copies pixels through the CPU.
@@ -87,34 +87,34 @@ public final class FlixelAndroidVideoPlayer implements FlixelVideoPlayer {
    * and the vertices at clip y = +1 sample t = 0 (the bottom of the picture).
    */
   private static final float[] QUAD = {
-    -1f, -1f, 0f, 1f,
-     1f, -1f, 1f, 1f,
-    -1f,  1f, 0f, 0f,
-     1f,  1f, 1f, 0f,
+      -1f, -1f, 0f, 1f,
+      1f, -1f, 1f, 1f,
+      -1f, 1f, 0f, 0f,
+      1f, 1f, 1f, 0f,
   };
 
   private static final String VERTEX_SOURCE =
-    """
-      attribute vec2 a_pos;
-      attribute vec2 a_uv;
-      uniform mat4 u_texMatrix;
-      varying vec2 v_uv;
-      void main() {
-        gl_Position = vec4(a_pos, 0.0, 1.0);
-        v_uv = (u_texMatrix * vec4(a_uv, 0.0, 1.0)).xy;
-      }
-      """;
+      """
+          attribute vec2 a_pos;
+          attribute vec2 a_uv;
+          uniform mat4 u_texMatrix;
+          varying vec2 v_uv;
+          void main() {
+            gl_Position = vec4(a_pos, 0.0, 1.0);
+            v_uv = (u_texMatrix * vec4(a_uv, 0.0, 1.0)).xy;
+          }
+          """;
 
   private static final String FRAGMENT_SOURCE =
-    """
-      #extension GL_OES_EGL_image_external : require
-      precision mediump float;
-      varying vec2 v_uv;
-      uniform samplerExternalOES u_texture;
-      void main() {
-        gl_FragColor = vec4(texture2D(u_texture, v_uv).rgb, 1.0);
-      }
-      """;
+      """
+          #extension GL_OES_EGL_image_external : require
+          precision mediump float;
+          varying vec2 v_uv;
+          uniform samplerExternalOES u_texture;
+          void main() {
+            gl_FragColor = vec4(texture2D(u_texture, v_uv).rgb, 1.0);
+          }
+          """;
 
   private static final int ATTR_POS = 0;
   private static final int ATTR_UV = 1;

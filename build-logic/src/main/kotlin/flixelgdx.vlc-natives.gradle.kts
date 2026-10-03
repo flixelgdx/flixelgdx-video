@@ -1,11 +1,3 @@
-/**
- * Convention plugin for VLC natives JAR modules.
- *
- * <p>Applies {@code flixelgdx.java-library} and wires the {@link DownloadVlcNativesTask}
- * when {@code -PpackageVlcNatives=true} is set. Each applying module only needs to declare its
- * VLC version, platform identifier, and download specs via the {@code vlcNatives} extension.
- */
-
 plugins {
   id("flixelgdx.java-library")
 }

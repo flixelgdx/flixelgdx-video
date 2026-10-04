@@ -1,6 +1,6 @@
 [versions]
 agp = "8.7.3"
-flixelgdx = "0.6.2"
+flixelgdx = "0.7.0"
 graalvm = "24.2.0"
 jetbrainsAnnotations = "26.1.0"
 jna = "5.17.0"

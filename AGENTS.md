@@ -178,20 +178,29 @@ Summarize edits in plain language: what changed, why, and how it fits the extens
 
 ## Working with Git and Pull Requests
 
-- Prefer **small, focused commits** as you finish logical slices of work so history stays readable.
-- Use **one branch and one pull request** unless the user explicitly asks for more.
+- Keep pull requests **tightly focused**: one pull request covers **one logical change** (a single feature, fix,
+  refactor, or docs update). If a task touches several unrelated things, split it into **separate branches and pull
+  requests**, one per change, instead of bundling everything under a single release-style pull request. Release notes
+  are assembled from these titles later, so each pull request should stand on its own.
+- Give each branch a short name that matches its one change (for example, `fix/camera-zoom-offset` or
+  `feat/gamepad-rumble`). Every branch starts from the latest `master`. If a change truly depends on another one that
+  has not been merged yet, branch off that change's branch and say so in the pull request description.
+- Prefer **small, focused commits** inside each pull request so history stays readable. Don't dump a large change into
+  one commit; split each logical step into its own commit.
 - If the user renames a pull request, **do not rename it back**; respect their title.
-- Commit titles must be **short and descriptive** (72 characters maximum), **present tense**, and must
-  not start with type keywords like `fix:`, `feat:`, or `refactor:`. Examples:
+- Your commit titles should be **short and descriptive**, not exceeding **72 characters**, and should not contain
+  **keywords in front (e.g. `fix`, `feat`, `refactor`, etc.)**. They should also be **present** tense. Examples:
     - "Switch version source from gradle.properties to git tags"
-    - "Add AGENTS.md and missing markdown docs"
     - "Fix per-frame allocation in desktop video callback"
-- Always pull the latest changes before editing code if on a branch outside of `master`.
-- If the current branch is `master`, **create a new branch** off the latest `master` before making changes.
-- When you are done with a task (and you have not yet made one), **create a pull request** following the
-  [PR template](.github/PULL_REQUEST_TEMPLATE.md) exactly.
-- Pull request titles should read as **past tense**, written as if announcing a new update. Examples:
-    - "Switched the version system to read from git tags instead of gradle.properties"
-    - "Added missing project markdown docs and AI instructions"
-- All pull requests must target the **`master`** branch.
-- If the user has changes present on the current branch, **do not undo, modify, or touch them**.
+    - "Add AGENTS.md and missing markdown docs"
+- Always pull the latest changes before changing any code if on a branch outside of the `master` branch.
+- If the current branch is set to `master` or something else, **create a new branch off of the latest changes from
+  `master`** for each change.
+- When you're done with a change (and you haven't yet made one for it), **create a pull request** for it. Make sure it
+  follows the [PR template](.github/PULL_REQUEST_TEMPLATE.md) exactly, describing only that change.
+- Pull request titles should be **past tense** and describe **only the one change** the pull request makes, in a single
+  short, specific sentence. Don't write a broad headline that sums up many changes at once. Examples:
+    - "Switched the version source to git tags"
+    - "Fixed a per-frame allocation in the desktop video callback"
+- All pull requests should target the **`master`** branch, unless they are stacked on another unmerged pull request.
+- If the user has changes present on the current branch, **do not undo, modify or touch them**. Leave them as-is.

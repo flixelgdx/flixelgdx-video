@@ -70,7 +70,7 @@ import java.nio.file.Files;
  */
 public final class FlixelDesktopVideoHandler implements FlixelVideoFactory {
 
-  private static final FlixelLogger LOG = Flixel.log.tagged("Video");
+  private static final FlixelLogger LOG = Flixel.log.tagged("Video/Desktop");
 
   private static Pointer instance;
 

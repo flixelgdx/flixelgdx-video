@@ -1,4 +1,5 @@
 import com.android.build.gradle.LibraryExtension
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
 
 plugins {
   id("flixelgdx.java-base")
@@ -45,6 +46,19 @@ afterEvaluate {
     }
     isFailOnError = true
   }
+
+  // Package the javadoc output above as the published -javadoc.jar (required by Maven Central).
+  // AGP's own javaDocReleaseGeneration task is turned off below because its bundled Dokka cannot
+  // parse JDK 25 version strings and crashes.
+  val javadocJar = tasks.register("javadocJar", Jar::class.java) {
+    group = "documentation"
+    description = "Packages the Android release Javadoc into a jar."
+    archiveClassifier = "javadoc"
+    from(tasks.named("javadoc"))
+  }
+  extensions.getByType(PublishingExtension::class.java).publications
+    .withType(MavenPublication::class.java)
+    .configureEach { artifact(javadocJar) }
 }
 
 // JitPack rewrites Gradle module metadata and drops classifier compatibility data; omit .module
@@ -55,6 +69,9 @@ tasks.matching { it.name.startsWith("generateMetadataFileFor") }.configureEach {
 
 mavenPublishing {
   publishToMavenCentral()
+
+  // Skip AGP's Dokka-based javadoc jar; the javadocJar task above provides it instead.
+  configure(AndroidSingleVariantLibrary(variant = "release", sourcesJar = true, publishJavadocJar = false))
 
   val hasSigning = findProperty("flixel.signing.enabled")?.toString() == "true"
     || findProperty("signing.keyId") != null

@@ -55,17 +55,22 @@ case the per-frame path allocates nothing.
   when a new frame is ready. The libvlc threads are kept attached to the JVM (a JNA callback thread
   initializer with `detach=false`), because attaching and detaching a thread on every callback would
   allocate on every frame.
-- **HTML5 (DOM element upload, GPU shrink):** The browser decodes the hidden video element. The
-  player uploads the element directly to its own WebGL texture, so no pixels are read back into
-  Java. At lower quality presets, a small shader then draws that texture into a smaller framework
-  render target on the GPU, and the render target's texture is the frame the batch draws. The frame
+- **HTML5 (DOM element copy, GPU shrink):** The browser decodes the hidden video element. The
+  player hands the element to WebGPU's `copyExternalImageToTexture` (through jwebgpu's generated
+  TeaVM bindings), which copies it into a framework render target at the native video size, so no
+  pixels are read back into Java. The copy needs a texture that can be rendered to, which is why the
+  frame lives in a render target. At lower quality presets, a small WGSL pass then draws that texture
+  into a smaller render target, and that render target's texture is the frame the batch draws. The frame
   never passes through a 2D canvas, because a canvas can force a slow software path in some
   browsers, which made lower presets cost more than full quality.
-- **Android (SurfaceTexture, OES blit, render target):** `MediaPlayer` renders into a
-  `SurfaceTexture`, which exposes each frame as an external OpenGL (OES) texture. The framework batch
-  can only draw normal 2D textures, so on the render thread the player draws the OES texture once per
-  new frame into a framework render target. That render target's texture is the frame the batch
-  draws. The quality preset scales the render target.
+- **Android (ImageReader, YUV upload, GPU conversion):** `MediaPlayer` renders into an
+  `ImageReader` as YUV 4:2:0 frames. On the game thread the player uploads the three planes into
+  one-channel WebGPU textures with `writeTexture`, straight from the planes' direct buffers, and a
+  small WGSL pass converts them to RGBA inside a framework render target. That render target's
+  texture is the frame the batch draws, and the quality preset scales it. jwebgpu only exposes the
+  standard `webgpu.h` API, which has no way to import a decoder's hardware buffer, so the frame
+  takes this upload path instead of staying on the GPU. `ImageReader` allocates a small wrapper per
+  frame inside the platform, and a video tagged with a rotation is drawn unrotated.
 
 Quality only changes the resolution of the frame texture. Each `FlixelVideoPlayer` reports the
 video's native size (`getVideoWidth/Height`), which `FlixelVideo` uses as its default drawn size, and
@@ -99,9 +104,9 @@ The video backends depend on the framework as external artifacts
 (`org.flixelgdx:flixelgdx-core:<version>`, `flixelgdx-desktop`, `flixelgdx-html5`,
 `flixelgdx-android`), resolved from Maven Central, a local `publishToMavenLocal` build, or JitPack.
 To build against framework source instead, attach it manually with
-`--include-build ../flixelgdx`; nothing does this automatically. The Android backend uses the
-framework's GLES Android backend, which may be newer than the version pinned in the catalog, so
-building it during development usually needs that flag. See [COMPILING.md](COMPILING.md).
+`--include-build ../flixelgdx`; nothing does this automatically. The HTML5 and Android
+backends also use the framework's shared WebGPU module (`flixelgdx-gpu`) and the jwebgpu API, at the
+versions the framework release pins. See [COMPILING.md](COMPILING.md).
 
 ## GitHub Integration
 

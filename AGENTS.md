@@ -18,9 +18,9 @@ This repository has four published Java modules and five packaging-only natives 
 - **`flixelgdx-video-desktop`**: Desktop backend powered by [libvlc](https://www.videolan.org/vlc/libvlc.html),
   bridged through JNA. Decodes frames via libvlc video callbacks and copies them into a texture through core.
 - **`flixelgdx-video-html5`**: Web backend built on a hidden HTML video element the browser decodes. The element
-  is uploaded straight to a WebGL texture, with no CPU readback.
-- **`flixelgdx-video-android`**: Android backend built on `MediaPlayer`. Decodes into a `SurfaceTexture` and
-  draws it on the GPU into a render target. Only part of the build when the `includeAndroid` flag is set
+  is copied straight to a WebGPU texture with `copyExternalImageToTexture`, with no CPU readback.
+- **`flixelgdx-video-android`**: Android backend built on `MediaPlayer`. Decodes into an `ImageReader` as YUV
+  planes, uploads them to WebGPU textures, and converts them to RGBA on the GPU into a render target. Only part of the build when the `includeAndroid` flag is set
   (`-PincludeAndroid=true` or `includeAndroid=true` in `local.properties`), and it needs an Android SDK.
 - **`flixelgdx-video-vlc-natives-*`**: Packaging-only modules. They download, strip, and bundle the libvlc
   natives for Windows and Linux (x86-64 and ARM64) and macOS (universal). Only built when the
@@ -74,7 +74,7 @@ When explaining code or introducing patterns:
 - **Do not allocate objects inside loops or in methods invoked every frame.** The video upload path
   (`FlixelVideoPlayer.update(...)`, plus `FlixelVideo.update(...)` and `FlixelVideo.draw(...)`) is called per
   frame. Do not allocate there. The same rule applies to any code a backend calls on its decode thread or
-  listener threads (libvlc callbacks, `MediaPlayer` and `SurfaceTexture` listeners).
+  listener threads (libvlc callbacks, `MediaPlayer` and `ImageReader` listeners).
 - **Always put fields in the correct order for each class**. Follow the order below:
 
   1. `long`s and `double`s
@@ -115,7 +115,7 @@ When explaining code or introducing patterns:
 
 ### Language and style
 
-- Target **Java 17**. Prefer modern features (records, lambdas, modern `switch`) over legacy patterns.
+- Target **Java 25**. Prefer modern features (records, lambdas, modern `switch`) over legacy patterns.
 - **Import** every type you use. Do **not** use star imports (`*`).
 - Do **not** use fully qualified class names inline when a normal import would read cleanly.
 - Prefer **short** field and method names. If shortening a name hides its meaning, use a concise name plus
@@ -145,7 +145,7 @@ Documentation should read like a **beginner-friendly handbook**, not an expert-o
 ## Architecture and scope
 
 - `flixelgdx-video-core` is the only module a game's shared code should depend on. Keep backend quirks (libvlc
-  callbacks, JNA bindings, browser DOM and canvas access, Android `MediaPlayer` and GL code) out of core; abstract with the `FlixelVideoFactory` service
+  callbacks, JNA bindings, browser DOM access, Android `MediaPlayer` code, and WebGPU passes through jwebgpu) out of core; abstract with the `FlixelVideoFactory` service
   contract.
 - Desktop, HTML5, and Android backends are **strictly separate**. Do not let desktop JNA types leak into core
   or the other backends, and keep Android types (`android.*`) out of core, desktop, and HTML5.

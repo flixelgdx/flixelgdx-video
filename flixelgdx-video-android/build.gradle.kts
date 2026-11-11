@@ -10,16 +10,18 @@ android {
   compileSdk = 36
 
   defaultConfig {
-    minSdk = 24
+    minSdk = 26
   }
   compileOptions {
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
   }
 }
 
 dependencies {
   api(project(":flixelgdx-video-core"))
   implementation(libs.flixelgdx.android)
+  implementation(libs.flixelgdx.gpu)
+  implementation(libs.jwebgpu.api)
   implementation(libs.jetbrains.annotations)
 }

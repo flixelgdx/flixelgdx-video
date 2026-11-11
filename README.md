@@ -155,6 +155,19 @@ public class PlayState extends FlixelState {
 }
 ```
 
+### Debugging videos
+
+Videos work with the FlixelGDX debugger app just like sprites. While your game runs in debug mode, a video shows
+up in the scene tree, draws its box in the viewport, and can be clicked, dragged, and focused with "Go to". Selecting
+one opens a **Video** section in the inspector with its position, size, angle, and playback state. You can edit most
+of it live, for example to seek, pause, change the rate or volume, or switch the quality preset by typing a name such
+as `HALF`. Nothing has to be set up, and release builds are not affected.
+
+> [!NOTE]
+> `setPosition(...)`, `setSize(...)`, and `setScrollFactor(...)` no longer return the video, because `FlixelVideo`
+> now implements the framework's `FlixelPositional` interface. Call them as separate statements instead of
+> chaining them.
+
 ---
 
 ## Contributing and building

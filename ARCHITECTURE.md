@@ -14,7 +14,10 @@ extension. That one-directional relationship is why the extension can live in it
   splits it in two on purpose:
   - `FlixelVideo` is the final, game-facing sprite. Your game adds it to a state like any other
     object. It wraps a player and adds the game-side behavior: signals (such as `onComplete`),
-    automatic pause and resume on window focus, sizing, `screenCenter()`, and drawing.
+    automatic pause and resume on window focus, sizing, rotation, `screenCenter()`, and drawing.
+    It implements the framework's `FlixelPositional` and `FlixelDebugNode`, so the debugger can
+    select, drag, and focus it, and `FlixelVideoDebugSections` gives it an inspector section in
+    debug mode.
   - `FlixelVideoPlayer` is the interface each backend implements. A player decodes the video and
     owns the texture that holds the current frame, and `FlixelVideo` draws whatever texture the
     player returns.

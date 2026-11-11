@@ -28,8 +28,12 @@ import org.flixelgdx.FlixelBasic;
 import org.flixelgdx.FlixelCamera;
 import org.flixelgdx.FlixelState;
 import org.flixelgdx.audio.FlixelSound;
+import org.flixelgdx.debug.FlixelDebugNode;
+import org.flixelgdx.debug.FlixelDebugPicker;
 import org.flixelgdx.file.FlixelFile;
+import org.flixelgdx.functional.FlixelPositional;
 import org.flixelgdx.graphics.FlixelBatch;
+import org.flixelgdx.graphics.FlixelFrame;
 import org.flixelgdx.graphics.FlixelTexture;
 import org.flixelgdx.signal.FlixelSignal;
 import org.flixelgdx.signal.FlixelSignal.SignalHandler;
@@ -76,10 +80,16 @@ import org.jetbrains.annotations.Nullable;
  * <p>Advanced code that needs a backend-specific feature can reach the player through
  * {@link #getPlayer()}.
  *
+ * <p>The video works with the framework's debugger like a sprite does. It implements
+ * {@link FlixelPositional}, so it can be dragged in the debugger's viewport and focused with
+ * "Go to", and {@link FlixelDebugNode}, so the viewport draws its box and a click selects it. While
+ * the game runs in debug mode, the inspector also shows a "Video" section with its position, size,
+ * and playback state, most of which can be edited live (see {@link FlixelVideoDebugSections}).
+ *
  * @see FlixelVideos
  * @see FlixelVideoPlayer
  */
-public final class FlixelVideo extends FlixelBasic {
+public final class FlixelVideo extends FlixelBasic implements FlixelPositional, FlixelDebugNode {
 
   /** Signal dispatched when this video starts playing. **/
   @NotNull
@@ -115,11 +125,27 @@ public final class FlixelVideo extends FlixelBasic {
   /** Vertical parallax factor, same contract as sprites ({@code 1} = follows the camera). */
   public float scrollY = 1f;
 
+  /** Rotation in degrees, clockwise on screen, around the center of the drawn video. */
+  public float angle;
+
+  /** {@link #x} at the start of the last {@link #update(float)}. */
+  private float lastX;
+
+  /** {@link #y} at the start of the last {@link #update(float)}. */
+  private float lastY;
+
   @NotNull
   private final FlixelVideoPlayer player;
 
   @NotNull
   private FlixelVideoQuality quality = FlixelVideoQuality.FULL;
+
+  /**
+   * The frame texture wrapped as a {@link FlixelFrame} for rotated drawing. Rebuilt only when the
+   * texture or picture size changes, so drawing a rotated video does not allocate every frame.
+   */
+  @Nullable
+  private FlixelFrame rotatedFrame;
 
   /**
    * Pauses the video when the window loses focus (or the app is backgrounded), so it lines up with
@@ -172,6 +198,7 @@ public final class FlixelVideo extends FlixelBasic {
     };
     Flixel.Signals.windowUnfocused.add(onWindowUnfocused);
     Flixel.Signals.windowFocused.add(onWindowFocused);
+    FlixelVideoDebugSections.register();
   }
 
   /**
@@ -316,6 +343,8 @@ public final class FlixelVideo extends FlixelBasic {
     if (!active || !exists) {
       return;
     }
+    lastX = x;
+    lastY = y;
 
     player.update(elapsed);
 
@@ -349,18 +378,89 @@ public final class FlixelVideo extends FlixelBasic {
     FlixelCamera cam = Flixel.getDrawCamera() != null ? Flixel.getDrawCamera() : Flixel.cameras.first();
     float wx = cam.worldToViewX(x, scrollX);
     float wy = cam.worldToViewY(y, scrollY);
-    if (!cam.isInView(wx, wy, drawW, drawH)) {
+
+    // The picture sits in the top-left of the texture; decoders often make the texture a little
+    // larger than the visible frame (codec row alignment), so the sampled region is cropped to the
+    // real picture size instead of stretching the padding across the quad.
+    int texW = tex.getWidth();
+    int texH = tex.getHeight();
+    if (angle == 0f) {
+      if (!cam.isInView(wx, wy, drawW, drawH)) {
+        return;
+      }
+      float u2 = texW > 0 ? Math.min(1f, videoW / (float) texW) : 1f;
+      float v2 = texH > 0 ? Math.min(1f, videoH / (float) texH) : 1f;
+      batch.draw(tex, wx, wy, drawW, drawH, 0f, 0f, u2, v2);
       return;
     }
 
-    // The picture sits in the top-left of the texture; decoders often make the texture a little
-    // larger than the visible frame (codec row alignment), so crop the sampled region to the real
-    // picture size instead of stretching the padding across the quad.
-    int texW = tex.getWidth();
-    int texH = tex.getHeight();
-    float u2 = texW > 0 ? Math.min(1f, videoW / (float) texW) : 1f;
-    float v2 = texH > 0 ? Math.min(1f, videoH / (float) texH) : 1f;
-    batch.draw(tex, wx, wy, drawW, drawH, 0f, 0f, u2, v2);
+    float boundsW = rotatedWidth(drawW, drawH);
+    float boundsH = rotatedHeight(drawW, drawH);
+    if (!cam.isInView(wx + (drawW - boundsW) / 2f, wy + (drawH - boundsH) / 2f, boundsW, boundsH)) {
+      return;
+    }
+    int regionW = Math.min(videoW, texW);
+    int regionH = Math.min(videoH, texH);
+    FlixelFrame frame = rotatedFrame;
+    if (frame == null || frame.getTexture() != tex || frame.getRegionWidth() != regionW
+        || frame.getRegionHeight() != regionH) {
+      frame = new FlixelFrame(tex, 0, 0, regionW, regionH);
+      rotatedFrame = frame;
+    }
+    batch.draw(frame, wx, wy, drawW / 2f, drawH / 2f, drawW, drawH, 1f, 1f, angle, false, false);
+  }
+
+  /**
+   * Measures the box the video covers on a camera, for the debugger's viewport.
+   *
+   * <p>A rotated video reports the smallest upright box around it. Nothing is reported while the
+   * video is hidden, has no size yet, or is not drawn on {@code cam}.
+   *
+   * @param cam The camera the box is measured on.
+   * @param out Receives {@code left, top, width, height} in view space.
+   * @return {@code true} when the video covers an area on {@code cam}.
+   */
+  @Override
+  public boolean getDebugBounds(@NotNull FlixelCamera cam, float[] out) {
+    float drawW = getDrawWidth();
+    float drawH = getDrawHeight();
+    if (!exists || !visible || drawW <= 0f || drawH <= 0f || !FlixelDebugPicker.isDrawnOn(this, cam)) {
+      return false;
+    }
+    float boundsW = rotatedWidth(drawW, drawH);
+    float boundsH = rotatedHeight(drawW, drawH);
+    out[0] = cam.worldToViewX(x, scrollX) + (drawW - boundsW) / 2f;
+    out[1] = cam.worldToViewY(y, scrollY) + (drawH - boundsH) / 2f;
+    out[2] = boundsW;
+    out[3] = boundsH;
+    return true;
+  }
+
+  @Override
+  public void changeX(float dx) {
+    x += dx;
+  }
+
+  @Override
+  public void changeY(float dy) {
+    y += dy;
+  }
+
+  @Override
+  public void changeAngle(float deltaDegrees) {
+    angle += deltaDegrees;
+  }
+
+  /** Returns the width of the upright box around a {@code width} by {@code height} video turned by {@link #angle}. */
+  private float rotatedWidth(float width, float height) {
+    double radians = Math.toRadians(angle);
+    return (float) (width * Math.abs(Math.cos(radians)) + height * Math.abs(Math.sin(radians)));
+  }
+
+  /** Returns the height of the upright box around a {@code width} by {@code height} video turned by {@link #angle}. */
+  private float rotatedHeight(float width, float height) {
+    double radians = Math.toRadians(angle);
+    return (float) (width * Math.abs(Math.sin(radians)) + height * Math.abs(Math.cos(radians)));
   }
 
   @Override
@@ -380,6 +480,10 @@ public final class FlixelVideo extends FlixelBasic {
     height = 0f;
     scrollX = 1f;
     scrollY = 1f;
+    angle = 0f;
+    lastX = 0f;
+    lastY = 0f;
+    rotatedFrame = null;
     autoPaused = false;
     autoDestroy = false;
     completed = false;
@@ -590,8 +694,14 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @return World X position.
    */
+  @Override
   public float getX() {
     return x;
+  }
+
+  @Override
+  public void setX(float x) {
+    this.x = x;
   }
 
   /**
@@ -599,8 +709,14 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @return World Y position.
    */
+  @Override
   public float getY() {
     return y;
+  }
+
+  @Override
+  public void setY(float y) {
+    this.y = y;
   }
 
   /**
@@ -608,13 +724,51 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @param x World X of the top-left corner.
    * @param y World Y of the video.
-   * @return {@code this} for chaining.
    */
-  @NotNull
-  public FlixelVideo setPosition(float x, float y) {
+  @Override
+  public void setPosition(float x, float y) {
     this.x = x;
     this.y = y;
-    return this;
+  }
+
+  /**
+   * Returns the world X position the video had at the start of the last update.
+   *
+   * @return The previous world X position.
+   */
+  @Override
+  public float getLastX() {
+    return lastX;
+  }
+
+  /**
+   * Returns the world Y position the video had at the start of the last update.
+   *
+   * @return The previous world Y position.
+   */
+  @Override
+  public float getLastY() {
+    return lastY;
+  }
+
+  /**
+   * Returns the world X position of the center of the drawn video.
+   *
+   * @return {@link #x} plus half of {@link #getDrawWidth()}.
+   */
+  @Override
+  public float getMidpointX() {
+    return x + getDrawWidth() / 2f;
+  }
+
+  /**
+   * Returns the world Y position of the center of the drawn video.
+   *
+   * @return {@link #y} plus half of {@link #getDrawHeight()}.
+   */
+  @Override
+  public float getMidpointY() {
+    return y + getDrawHeight() / 2f;
   }
 
   /**
@@ -622,8 +776,19 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @return Drawn width in pixels.
    */
+  @Override
   public float getWidth() {
     return width;
+  }
+
+  /**
+   * Sets the drawn width in pixels.
+   *
+   * @param width Drawn width in pixels ({@code 0} = decoded frame width).
+   */
+  @Override
+  public void setWidth(float width) {
+    this.width = width;
   }
 
   /**
@@ -631,8 +796,39 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @return Drawn height in pixels.
    */
+  @Override
   public float getHeight() {
     return height;
+  }
+
+  /**
+   * Sets the drawn height in pixels.
+   *
+   * @param height Drawn height in pixels ({@code 0} = decoded frame height).
+   */
+  @Override
+  public void setHeight(float height) {
+    this.height = height;
+  }
+
+  /**
+   * Returns the rotation in degrees, clockwise on screen around the center of the drawn video.
+   *
+   * @return The rotation in degrees.
+   */
+  @Override
+  public float getAngle() {
+    return angle;
+  }
+
+  /**
+   * Sets the rotation in degrees, clockwise on screen around the center of the drawn video.
+   *
+   * @param degrees The rotation in degrees.
+   */
+  @Override
+  public void setAngle(float degrees) {
+    angle = degrees;
   }
 
   /**
@@ -663,13 +859,11 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @param width Drawn width in pixels ({@code 0} = decoded frame width).
    * @param height Drawn height in pixels ({@code 0} = decoded frame height).
-   * @return {@code this} for chaining.
    */
-  @NotNull
-  public FlixelVideo setSize(float width, float height) {
+  @Override
+  public void setSize(float width, float height) {
     this.width = width;
     this.height = height;
-    return this;
   }
 
   /**
@@ -677,6 +871,7 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @return Horizontal scroll factor.
    */
+  @Override
   public float getScrollX() {
     return scrollX;
   }
@@ -686,6 +881,7 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @return Vertical scroll factor.
    */
+  @Override
   public float getScrollY() {
     return scrollY;
   }
@@ -696,12 +892,10 @@ public final class FlixelVideo extends FlixelBasic {
    *
    * @param scrollX Horizontal scroll factor.
    * @param scrollY Vertical scroll factor.
-   * @return {@code this} for chaining.
    */
-  @NotNull
-  public FlixelVideo setScrollFactor(float scrollX, float scrollY) {
+  @Override
+  public void setScrollFactor(float scrollX, float scrollY) {
     this.scrollX = scrollX;
     this.scrollY = scrollY;
-    return this;
   }
 }

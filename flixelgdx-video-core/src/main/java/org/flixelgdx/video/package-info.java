@@ -62,6 +62,15 @@
  * {@link org.flixelgdx.video.FlixelVideo#destroy() FlixelVideo.destroy()} when the
  * video leaves the game for good to release the decoder and the frame texture.
  *
+ * <h2>Debugging</h2>
+ *
+ * <p>{@link org.flixelgdx.video.FlixelVideo FlixelVideo} implements the framework's
+ * {@link org.flixelgdx.functional.FlixelPositional FlixelPositional} and
+ * {@link org.flixelgdx.debug.FlixelDebugNode FlixelDebugNode}, so the debugger app can select,
+ * drag, and focus it in the viewport. In debug mode,
+ * {@link org.flixelgdx.video.FlixelVideoDebugSections FlixelVideoDebugSections} adds a "Video"
+ * section to the inspector with editable position, size, and playback rows.
+ *
  * <h2>Frame texture architecture</h2>
  *
  * <p>Each player owns one {@link org.flixelgdx.graphics.FlixelTexture FlixelTexture} that holds

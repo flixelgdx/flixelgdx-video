@@ -113,6 +113,7 @@ versions the framework release pins. See [COMPILING.md](COMPILING.md).
 Like the framework, this repository uses GitHub Actions for continuous integration
 (`.github/workflows/ci_build.yml`) and for publishing to Maven Central when a `v*` tag is pushed
 (`.github/workflows/publish.yml`, which also packages the libvlc natives). The CI workflow runs a
-Spotless formatting check, a Checkstyle code quality check, a Javadoc check, and a build matrix that compiles the desktop backend on
-Linux, Windows, and macOS, the Android backend on Linux (with an Android SDK set up and
-`-PincludeAndroid=true`), and the web backend.
+Spotless formatting check, a Checkstyle code quality check, a Javadoc check, and a build matrix on Linux that compiles the desktop
+backend, the Android backend (with an Android SDK set up and `-PincludeAndroid=true`), and the web
+backend. The desktop backend is plain Java with no native code of its own, so one build covers
+every desktop OS.

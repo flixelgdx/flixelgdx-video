@@ -11,5 +11,8 @@ plugins {
 dependencies {
   api(project(":flixelgdx-video-core"))
   api(libs.flixelgdx.html5)
+  implementation(libs.flixelgdx.gpu)
+  implementation(libs.jwebgpu.api)
+  implementation(libs.jwebgpu.teavm)
   implementation(libs.jetbrains.annotations)
 }

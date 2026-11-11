@@ -7,7 +7,7 @@ two parts: getting the extension to build against the framework, and then consum
 extension from a separate test game.
 
 This guide focuses on what is specific to this repository. For the full environment setup (installing
-JDK 17 with Eclipse Temurin, Git, IDE configuration, and platform troubleshooting), follow the
+JDK 25 with Eclipse Temurin, Git, IDE configuration, and platform troubleshooting), follow the
 framework's guide, which applies here unchanged:
 **[flixelgdx/flixelgdx -> COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/master/COMPILING.md)**.
 
@@ -29,8 +29,8 @@ framework's guide, which applies here unchanged:
 
 ## Prerequisites
 
-- **Java (JDK 17, Eclipse Temurin).** The build uses the Gradle wrapper and a Java 17 toolchain.
-  Install Temurin 17 as described in the framework's
+- **Java (JDK 25, Eclipse Temurin).** The build uses the Gradle wrapper and a Java 25 toolchain,
+  because the framework itself is compiled for Java 25. Install Temurin 25 as described in the framework's
   [COMPILING.md](https://github.com/flixelgdx/flixelgdx/blob/master/COMPILING.md).
 - **Git**, to clone this repository and the framework.
 - **(Android module only)** The Android SDK, with a platform (CI uses `android-36`) and the matching
@@ -42,7 +42,7 @@ framework's guide, which applies here unchanged:
 Verify Java after installing:
 
 ```bash
-java -version   # should report 17 and mention OpenJDK / Temurin
+java -version   # should report 25 and mention OpenJDK / Temurin
 ```
 
 ---
@@ -96,12 +96,6 @@ This substitutes the framework artifacts with your local `../flixelgdx` checkout
 coordinates, so the `flixelgdx` version number in the catalog does not need to match while the flag
 is present. Any framework change is picked up on the next build with no republishing. Add the flag to
 whichever Gradle command you are running (`build`, `test`, an IDE's Gradle sync arguments, and so on).
-
-> [!IMPORTANT]
-> The Android backend uses the framework's GLES Android backend. That backend is on the framework's
-> `master` branch but is newer than the `flixelgdx` version pinned in the catalog, so building the
-> Android module during development needs `--include-build ../flixelgdx` until a framework release
-> contains it. Nothing attaches the framework automatically; you always pass the flag yourself.
 
 ---
 

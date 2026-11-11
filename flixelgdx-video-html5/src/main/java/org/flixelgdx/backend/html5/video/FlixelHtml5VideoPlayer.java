@@ -24,7 +24,8 @@
 package org.flixelgdx.backend.html5.video;
 
 import org.flixelgdx.Flixel;
-import org.flixelgdx.backend.html5.graphics.FlixelHtml5Graphics;
+import org.flixelgdx.backend.gpu.FlixelGpuGraphics;
+import org.flixelgdx.backend.gpu.FlixelGpuTexture;
 import org.flixelgdx.graphics.FlixelRenderTarget;
 import org.flixelgdx.graphics.FlixelTexture;
 import org.flixelgdx.video.FlixelVideo;
@@ -34,24 +35,29 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.teavm.jso.JSBody;
 import org.teavm.jso.JSObject;
-import org.teavm.jso.webgl.WebGLRenderingContext;
+
+import io.github.stringdotjar.jwebgpu.GpuDevice;
+import io.github.stringdotjar.jwebgpu.GpuQueue;
+import io.github.stringdotjar.jwebgpu.GpuTexture;
+import io.github.stringdotjar.jwebgpu.teavm.TeaVmGpuQueue;
+import io.github.stringdotjar.jwebgpu.teavm.TeaVmGpuTexture;
 
 /**
  * Web video player built on a hidden HTML video element.
  *
  * <p>The video element is used strictly as a decoding source and is never attached to
- * the DOM, so it cannot float above or below the game canvas. This player owns one
- * {@link FlixelWebGlVideoTexture} and rewrites its pixels every time the browser decodes a new
- * frame, so videos draw through the regular batch and keep state draw order intact (a sprite added
- * after the video renders above it). {@link FlixelVideo} wraps this player; game code does not use
- * it directly.
+ * the DOM, so it cannot float above or below the game canvas. This player owns a render target at
+ * the native video size and rewrites its pixels every time the browser decodes a new frame, so videos
+ * draw through the regular batch and keep state draw order intact (a sprite added after the video
+ * renders above it). {@link FlixelVideo} wraps this player; game code does not use it directly.
  *
- * <p>Each ready frame is uploaded to the GPU with no Java-side allocation. The video element is
- * always passed directly to {@code texSubImage2D}, letting the browser copy pixels straight from
- * the decoder to the GPU. At full quality that texture is the frame. At lower
- * {@link FlixelVideoQuality} presets it is only a source: a tiny shader draws it into a smaller
- * render target on the GPU, and that target is the frame. Nothing is ever read back to the CPU, and
- * no {@code <canvas>} sits in between (a 2D canvas forces a slow software path in some browsers).
+ * <p>Each ready frame is uploaded with WebGPU's {@code copyExternalImageToTexture}, which takes the
+ * video element itself, so the browser copies pixels straight from the decoder to the GPU with no
+ * Java-side allocation and no CPU readback. That call needs a texture that can be rendered to, which
+ * is why the frame lives in a render target. At full quality that texture is the frame. At lower
+ * {@link FlixelVideoQuality} presets it is only a source: a tiny WGSL pass
+ * ({@link FlixelHtml5VideoBlit}) draws it into a smaller render target, and that target is the frame.
+ * No {@code <canvas>} sits in between (a 2D canvas forces a slow software path in some browsers).
  *
  * <p>Autoplay policies may block {@link #play()} with sound before the first user
  * gesture; in that case playback resumes automatically on the next pointer or key
@@ -62,9 +68,17 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
   /** The hidden video element doing the decoding. */
   private final JSObject element;
 
-  /** Full-screen quad program and vertex array that shrink frames on the GPU, made on first use. */
-  @Nullable
-  private JSObject blit;
+  /** The {@code source} argument of {@code copyExternalImageToTexture}, which wraps {@link #element}. */
+  private final JSObject copySource;
+
+  /** The {@code destination} argument of {@code copyExternalImageToTexture}; its texture follows {@link #source}. */
+  private final JSObject copyDestination;
+
+  /** The {@code copySize} argument of {@code copyExternalImageToTexture}; always the native video size. */
+  private final JSObject copySize;
+
+  /** Shrinks frames on the GPU at lower quality presets. */
+  private final FlixelHtml5VideoBlit blit = new FlixelHtml5VideoBlit();
 
   /**
    * Receives the shrunk frame at lower quality presets; {@code null} at full quality. Its size is
@@ -74,11 +88,15 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
   private FlixelRenderTarget target;
 
   /**
-   * The texture the browser frames are uploaded into, always at the native video size; owned by
-   * this player. It is the drawn frame at full quality and the shrink source otherwise.
+   * The render target the browser frames are copied into, always at the native video size; owned by
+   * this player. Its texture is the drawn frame at full quality and the shrink source otherwise.
    */
   @Nullable
-  private FlixelWebGlVideoTexture videoTex;
+  private FlixelRenderTarget source;
+
+  /** The GPU texture {@link #copyDestination} points at, so a replaced texture is noticed. */
+  @Nullable
+  private GpuTexture copyTexture;
 
   @NotNull
   private FlixelVideoQuality mediaQuality = FlixelVideoQuality.FULL;
@@ -106,6 +124,9 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
    */
   public FlixelHtml5VideoPlayer(@NotNull String url) {
     element = jsCreateVideo(url);
+    copySource = jsCreateCopySource(element);
+    copyDestination = jsCreateCopyDestination();
+    copySize = jsCreateCopySize();
   }
 
   @Override
@@ -253,9 +274,9 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
     int height = scaledDimension(nativeHeight);
     boolean full = mediaQuality == FlixelVideoQuality.FULL;
 
-    FlixelWebGlVideoTexture tex = videoTex;
+    FlixelRenderTarget frame = source;
     FlixelRenderTarget scaled = target;
-    boolean sizeChanged = tex == null || nativeWidth != tex.getWidth() || nativeHeight != tex.getHeight();
+    boolean sizeChanged = frame == null || nativeWidth != frame.getWidth() || nativeHeight != frame.getHeight();
     boolean targetStale = full
         ? scaled != null
         : scaled == null || scaled.getWidth() != width || scaled.getHeight() != height;
@@ -264,21 +285,30 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
       return;
     }
 
-    WebGLRenderingContext gl = ((FlixelHtml5Graphics) Flixel.graphics).getGl();
-    if (gl == null) {
+    if (!(Flixel.graphics instanceof FlixelGpuGraphics graphics)) {
+      return;
+    }
+    GpuDevice device = graphics.getDevice();
+    GpuQueue queue = graphics.getQueue();
+    if (device == null || queue == null) {
       return;
     }
 
     if (sizeChanged) {
-      if (tex != null) {
-        tex.destroy();
+      FlixelRenderTarget created = Flixel.graphics.createRenderTarget(nativeWidth, nativeHeight);
+      if (!(created.getTexture() instanceof FlixelGpuTexture)) {
+        // Graphics are not ready yet; the size check keeps this retrying on the next frame.
+        created.destroy();
+        return;
       }
-      // Linear filtering only matters when this texture is the shrink source.
-      tex = new FlixelWebGlVideoTexture(gl, nativeWidth, nativeHeight, !full);
-      videoTex = tex;
+      if (frame != null) {
+        frame.destroy();
+      }
+      frame = created;
+      source = created;
+      copyTexture = null;
+      jsSetCopySize(copySize, nativeWidth, nativeHeight);
       ready = false;
-    } else if (forceNextFrame) {
-      tex.setSmooth(!full);
     }
 
     if (full) {
@@ -301,18 +331,18 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
     }
     forceNextFrame = false;
 
-    // The browser copies the decoded frame straight to the GPU. At lower quality, a GPU pass then
-    // shrinks it into the render target.
-    tex.uploadFrom(element);
+    // The browser copies the decoded frame straight to the GPU. The texture is looked up every time
+    // because the framework replaces it if the device is ever lost.
+    FlixelGpuTexture frameTex = (FlixelGpuTexture) frame.getTexture();
+    GpuTexture gpuTex = frameTex.getGpuTexture();
+    if (gpuTex != copyTexture) {
+      jsSetCopyTexture(copyDestination, ((TeaVmGpuTexture) gpuTex).getJs());
+      copyTexture = gpuTex;
+    }
+    ((TeaVmGpuQueue) queue).getJs().copyExternalImageToTexture(copySource, copyDestination, copySize);
     if (!full) {
-      if (blit == null) {
-        blit = jsCreateBlit(gl);
-      }
-      // Anything the framework queued must reach the previous surface before the target changes.
-      Flixel.graphics.getBatch().flush();
-      scaled.begin();
-      jsBlit(gl, blit, tex.getGlTexture());
-      scaled.end();
+      // At lower quality, a GPU pass shrinks the frame into the smaller render target.
+      blit.draw(device, queue, frameTex, (FlixelGpuTexture) scaled.getTexture());
     }
     ready = true;
   }
@@ -328,17 +358,13 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
       target.destroy();
       target = null;
     }
-    if (blit != null) {
-      WebGLRenderingContext gl = ((FlixelHtml5Graphics) Flixel.graphics).getGl();
-      if (gl != null) {
-        jsDeleteBlit(gl, blit);
-      }
-      blit = null;
+    blit.destroy();
+    if (source != null) {
+      source.destroy();
+      source = null;
     }
-    if (videoTex != null) {
-      videoTex.destroy();
-      videoTex = null;
-    }
+    copyTexture = null;
+    jsSetCopyTexture(copyDestination, null);
     ready = false;
   }
 
@@ -378,8 +404,8 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
     if (!ready) {
       return null;
     }
-    FlixelRenderTarget scaled = target;
-    return scaled != null ? scaled.getTexture() : videoTex;
+    FlixelRenderTarget scaled = target != null ? target : source;
+    return scaled != null ? scaled.getTexture() : null;
   }
 
   @Override
@@ -515,66 +541,18 @@ public final class FlixelHtml5VideoPlayer implements FlixelVideoPlayer {
       + "v.load();")
   private static native void jsDispose(JSObject v);
 
-  /**
-   * Builds the program and vertex array that draw one texture across the whole framebuffer.
-   *
-   * <p>The quad has its own vertex array, so the batch's vertex state is left alone. Texture
-   * coordinate {@code y = 0} lands on the first row of memory, which is what a render target
-   * expects (top-down rows), so no flip is needed.
-   */
-  @JSBody(params = { "gl" }, script = """
-      var compile = function(type, source) {
-        var s = gl.createShader(type);
-        gl.shaderSource(s, source);
-        gl.compileShader(s);
-        return s;
-      };
-      var prog = gl.createProgram();
-      gl.attachShader(prog, compile(gl.VERTEX_SHADER, '#version 300 es\\n'
-          + 'layout(location=0) in vec2 a; out vec2 u;'
-          + 'void main() { u = a * 0.5 + 0.5; gl_Position = vec4(a, 0.0, 1.0); }'));
-      gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, '#version 300 es\\n'
-          + 'precision mediump float; in vec2 u; uniform sampler2D t; out vec4 c;'
-          + 'void main() { c = texture(t, u); }'));
-      gl.linkProgram(prog);
-      var vao = gl.createVertexArray();
-      gl.bindVertexArray(vao);
-      var buf = gl.createBuffer();
-      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
-      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
-      gl.enableVertexAttribArray(0);
-      gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
-      gl.bindVertexArray(null);
-      gl.bindBuffer(gl.ARRAY_BUFFER, null);
-      return { prog: prog, vao: vao, buf: buf };""")
-  private static native JSObject jsCreateBlit(WebGLRenderingContext gl);
+  @JSBody(params = { "v" }, script = "return { source: v };")
+  private static native JSObject jsCreateCopySource(JSObject v);
 
-  /**
-   * Draws the source texture across the bound framebuffer, then puts back the GL state it touched.
-   *
-   * <p>Blending and the scissor test are switched off for the draw and restored afterward. The
-   * batch re-applies its own program, texture, buffers, and blend mode on every flush, but it does
-   * not manage the scissor test, so that one has to be put back here.
-   */
-  @JSBody(params = { "gl", "b", "src" }, script = """
-      var scissor = gl.isEnabled(gl.SCISSOR_TEST);
-      var blend = gl.isEnabled(gl.BLEND);
-      var prev = gl.getParameter(gl.CURRENT_PROGRAM);
-      if (scissor) gl.disable(gl.SCISSOR_TEST);
-      if (blend) gl.disable(gl.BLEND);
-      gl.useProgram(b.prog);
-      gl.activeTexture(gl.TEXTURE0);
-      gl.bindTexture(gl.TEXTURE_2D, src);
-      gl.bindVertexArray(b.vao);
-      gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-      gl.bindVertexArray(null);
-      gl.useProgram(prev);
-      if (blend) gl.enable(gl.BLEND);
-      if (scissor) gl.enable(gl.SCISSOR_TEST);""")
-  private static native void jsBlit(WebGLRenderingContext gl, JSObject b, JSObject src);
+  @JSBody(script = "return { texture: null };")
+  private static native JSObject jsCreateCopyDestination();
 
-  @JSBody(params = { "gl", "b" }, script = "gl.deleteProgram(b.prog);"
-      + "gl.deleteVertexArray(b.vao);"
-      + "gl.deleteBuffer(b.buf);")
-  private static native void jsDeleteBlit(WebGLRenderingContext gl, JSObject b);
+  @JSBody(params = { "d", "texture" }, script = "d.texture = texture;")
+  private static native void jsSetCopyTexture(JSObject d, @Nullable JSObject texture);
+
+  @JSBody(script = "return { width: 0, height: 0 };")
+  private static native JSObject jsCreateCopySize();
+
+  @JSBody(params = { "s", "width", "height" }, script = "s.width = width; s.height = height;")
+  private static native void jsSetCopySize(JSObject s, int width, int height);
 }

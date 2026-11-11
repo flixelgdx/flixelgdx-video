@@ -1,8 +1,9 @@
 [versions]
-agp = "8.7.3"
-flixelgdx = "0.7.0"
+agp = "8.11.0"
+flixelgdx = "0.7.2"
 graalvm = "24.2.0"
 jetbrainsAnnotations = "26.1.0"
+jwebgpu = "0.1.1"
 jna = "5.17.0"
 spotless = "8.6.0"
 teavm = "0.15.0"
@@ -13,9 +14,12 @@ vlc = "3.0.23"
 flixelgdx-android = { module = "org.flixelgdx:flixelgdx-android", version.ref = "flixelgdx" }
 flixelgdx-core = { module = "org.flixelgdx:flixelgdx-core", version.ref = "flixelgdx" }
 flixelgdx-desktop = { module = "org.flixelgdx:flixelgdx-desktop", version.ref = "flixelgdx" }
+flixelgdx-gpu = { module = "org.flixelgdx:flixelgdx-gpu", version.ref = "flixelgdx" }
 flixelgdx-html5 = { module = "org.flixelgdx:flixelgdx-html5", version.ref = "flixelgdx" }
 graalvm-nativeimage = { module = "org.graalvm.sdk:nativeimage", version.ref = "graalvm" }
 jetbrains-annotations = { module = "org.jetbrains:annotations", version.ref = "jetbrainsAnnotations" }
+jwebgpu-api = { module = "io.github.stringdotjar:jwebgpu-api", version.ref = "jwebgpu" }
+jwebgpu-teavm = { module = "io.github.stringdotjar:jwebgpu-teavm", version.ref = "jwebgpu" }
 jna = { module = "net.java.dev.jna:jna", version.ref = "jna" }
 
 [plugins]

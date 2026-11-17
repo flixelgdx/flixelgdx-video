@@ -84,7 +84,7 @@ Each backend depends on `flixelgdx-video-core`, so pulling in a backend also bri
 If you use the `flxgdx` command-line tool, one command adds every backend your game has (core, desktop, web, and Android):
 
 ```sh
-flxgdx add library flixelgdx/flixelgdx-video
+flxgdx add library --repo flixelgdx/flixelgdx-video
 ```
 
 The libvlc natives come in automatically through the desktop backend. When the install finishes, `flxgdx` prints one note

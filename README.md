@@ -79,21 +79,6 @@ Each backend depends on `flixelgdx-video-core`, so pulling in a backend also bri
 
 ---
 
-## Install with flxgdx
-
-If you use the `flxgdx` command-line tool, one command adds every backend your game has (core, desktop, web, and Android):
-
-```sh
-flxgdx add library --repo flixelgdx/flixelgdx-video
-```
-
-The libvlc natives come in automatically through the desktop backend. When the install finishes, `flxgdx` prints one note
-per platform: it is the same single line from the next section that you add to each launcher
-(`FlixelDesktopVideoHandler.install()`, `FlixelHtml5VideoHandler.install()` or `FlixelAndroidVideoHandler.install(this)`).
-The manifest that makes this work is [`flxgdx.yml`](flxgdx.yml).
-
----
-
 ## How do I use it?
 
 Configuring the video extension only takes a single line of code you add in your platform module.

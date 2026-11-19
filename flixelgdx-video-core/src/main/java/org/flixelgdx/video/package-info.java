@@ -95,6 +95,11 @@
  * pauses automatically when the window loses focus or the app is backgrounded, and resumes
  * when focus returns.
  *
+ * <p>Every {@code FlixelVideo} also listens to
+ * {@link org.flixelgdx.Flixel.Signals#gamePaused Flixel.Signals.gamePaused}, so pausing the game
+ * loop (for example with the debugger's pause button) pauses the video too, and resuming the loop
+ * resumes it. This happens no matter what {@code Flixel.autoPause} is set to.
+ *
  * <h2>Writing a backend</h2>
  *
  * <p>A backend implements {@code FlixelVideoPlayer} and a {@code FlixelVideoFactory} that

@@ -160,6 +160,9 @@ one opens a **Video** section in the inspector with its position, size, angle, a
 of it live, for example to seek, pause, change the rate or volume, or switch the quality preset by typing a name such
 as `HALF`. Nothing has to be set up, and release builds are not affected.
 
+Pausing the game loop, such as with the debugger's pause button, pauses every playing video too, and resuming the
+loop resumes them.
+
 ---
 
 ## Contributing and building

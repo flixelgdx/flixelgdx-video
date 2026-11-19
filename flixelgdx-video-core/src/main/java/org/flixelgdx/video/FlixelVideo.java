@@ -37,6 +37,7 @@ import org.flixelgdx.graphics.FlixelFrame;
 import org.flixelgdx.graphics.FlixelTexture;
 import org.flixelgdx.signal.FlixelSignal;
 import org.flixelgdx.signal.FlixelSignal.SignalHandler;
+import org.flixelgdx.signal.FlixelSignalData.GamePausedSignalData;
 import org.flixelgdx.util.FlixelAxes;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
@@ -74,8 +75,10 @@ import org.jetbrains.annotations.Nullable;
  * <p>The video pauses automatically when the window loses focus or the application is sent to the
  * background (the same {@link Flixel.Signals#windowUnfocused} and {@link Flixel.Signals#windowFocused}
  * events the framework pauses audio on) while {@link Flixel#autoPause} is {@code true}, and resumes
- * when focus returns. Auto-pause talks to the player directly, so it does not fire
- * {@link #onPause} or {@link #onResume}.
+ * when focus returns. It also pauses whenever the game loop is paused (the
+ * {@link Flixel.Signals#gamePaused} event, such as the debugger's pause button) and resumes when the
+ * game loop does. Both kinds of auto-pause talk to the player directly, so they do not fire
+ * {@link #onPause} or {@link #onResume}, and the video only resumes once neither one applies.
  *
  * <p>Advanced code that needs a backend-specific feature can reach the player through
  * {@link #getPlayer()}.
@@ -156,6 +159,12 @@ public final class FlixelVideo extends FlixelBasic implements FlixelPositional, 
   /** Resumes the video when focus returns, undoing {@link #onWindowUnfocused}. */
   private final SignalHandler<Void> onWindowFocused;
 
+  /**
+   * Pauses the video when the game loop is paused and resumes it when the loop resumes. Kept as a
+   * field so it can be unregistered in {@link #destroy()}.
+   */
+  private final SignalHandler<GamePausedSignalData> onGamePaused;
+
   /** When {@code true}, {@link #destroy()} is called automatically when playback completes. */
   private boolean autoDestroy;
 
@@ -167,6 +176,12 @@ public final class FlixelVideo extends FlixelBasic implements FlixelPositional, 
    * when the application returns to the foreground.
    */
   private boolean autoPaused;
+
+  /**
+   * Set when this video was playing (or was waiting on focus to resume) when the game loop was
+   * paused, so it can be resumed when the loop resumes.
+   */
+  private boolean gamePaused;
 
   /**
    * Creates a video that is driven by the given platform player.
@@ -193,11 +208,29 @@ public final class FlixelVideo extends FlixelBasic implements FlixelPositional, 
     onWindowFocused = data -> {
       if (autoPaused) {
         autoPaused = false;
-        player.resume();
+        // The game loop may still be paused, in which case its resume brings the video back.
+        if (!gamePaused) {
+          player.resume();
+        }
+      }
+    };
+    onGamePaused = data -> {
+      if (data.paused()) {
+        if (!gamePaused && (autoPaused || player.isPlaying())) {
+          player.pause();
+          gamePaused = true;
+        }
+      } else if (gamePaused) {
+        gamePaused = false;
+        // Focus may still be lost, in which case the focus hook brings the video back.
+        if (!autoPaused) {
+          player.resume();
+        }
       }
     };
     Flixel.Signals.windowUnfocused.add(onWindowUnfocused);
     Flixel.Signals.windowFocused.add(onWindowFocused);
+    Flixel.Signals.gamePaused.add(onGamePaused);
     FlixelVideoDebugSections.register();
   }
 
@@ -468,6 +501,7 @@ public final class FlixelVideo extends FlixelBasic implements FlixelPositional, 
     super.destroy();
     Flixel.Signals.windowUnfocused.remove(onWindowUnfocused);
     Flixel.Signals.windowFocused.remove(onWindowFocused);
+    Flixel.Signals.gamePaused.remove(onGamePaused);
     onPlay.clear();
     onPause.clear();
     onResume.clear();
@@ -485,6 +519,7 @@ public final class FlixelVideo extends FlixelBasic implements FlixelPositional, 
     lastY = 0f;
     rotatedFrame = null;
     autoPaused = false;
+    gamePaused = false;
     autoDestroy = false;
     completed = false;
   }

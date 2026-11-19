@@ -43,8 +43,8 @@ import org.jetbrains.annotations.Nullable;
  * // Web launcher.
  * FlixelHtml5VideoHandler.install();
  *
- * // Android launcher.
- * FlixelAndroidVideoHandler.install();
+ * // Android launcher, inside your activity's onCreate(...).
+ * FlixelAndroidVideoHandler.install(this);
  * }</pre>
  *
  * <p>After that, creating a video anywhere in the game needs no further setup. Videos are located
@@ -90,7 +90,7 @@ public final class FlixelVideos {
           "No video backend factory registered. Install the video handler for your platform "
               + "in your launcher before creating videos (for example "
               + "FlixelDesktopVideoHandler.install(), FlixelHtml5VideoHandler.install(), or "
-              + "FlixelAndroidVideoHandler.install()).");
+              + "FlixelAndroidVideoHandler.install(context)).");
     }
     return new FlixelVideo(factory.createPlayer(file));
   }
@@ -100,7 +100,7 @@ public final class FlixelVideos {
    *
    * <p>Called once by the platform installer (for example {@code FlixelDesktopVideoHandler.install()}
    * on desktop, {@code FlixelHtml5VideoHandler.install()} on the web, or
-   * {@code FlixelAndroidVideoHandler.install()} on Android) before any video is created.
+   * {@code FlixelAndroidVideoHandler.install(context)} on Android) before any video is created.
    *
    * @param factory The backend factory to use (must not be {@code null}).
    * @throws IllegalArgumentException If {@code factory} is {@code null}.

@@ -146,14 +146,11 @@ public class PlayState extends FlixelState {
     add(cutscene);
     cutscene.play();
   }
-
-  @Override
-  public void destroy() {
-    // Destroy the video when you're done using it to release the texture and decoder.
-    cutscene.destroy();
-  }
 }
 ```
+
+You do not need to destroy the video yourself. Because it was added to the state, switching states destroys it along
+with the state's other members, which releases its texture and decoder.
 
 ### Debugging videos
 

@@ -33,9 +33,9 @@ extension. That one-directional relationship is why the extension can live in it
   [libvlc](https://www.videolan.org/vlc/libvlc.html). `FlixelVlcPlayer` bridges libvlc into the
   framework through JNA, and `FlixelDesktopVideoHandler` registers the factory. The native libraries
   come from the `flixelgdx-video-vlc-natives-*` modules.
-- **`flixelgdx-video-html5`**: The web backend. `FlixelHtml5Player` drives a hidden HTML video
+- **`flixelgdx-video-html5`**: The web backend. `FlixelHtml5VideoPlayer` drives a hidden HTML video
   element that the browser decodes.
-- **`flixelgdx-video-android`**: The Android backend. `FlixelMediaPlayerPlayer` decodes with the
+- **`flixelgdx-video-android`**: The Android backend. `FlixelAndroidVideoPlayer` decodes with the
   platform `MediaPlayer`, and `FlixelAndroidVideoHandler.install(Context)` registers the factory.
   It needs no native library. This module is only part of the build when the `includeAndroid` flag
   is set (see [COMPILING.md](COMPILING.md)).

@@ -66,21 +66,25 @@ There is no need to stop or destroy the video: switching states destroys this st
 
 If the video file is missing or the platform has no working decoder, the video never becomes ready and never fires
 `onComplete` (see [When a video cannot play](playing-videos.md#when-a-video-cannot-play)). A cutscene that waits for
-`onComplete` would then wait forever. Add a timeout to the cutscene above:
+`onComplete` would then wait forever. Add a timeout using timers to the cutscene above:
 
 ```java
-private float waited;
+import org.flixelgdx.timer.FlixelTimer;
+
+@Override
+public void create() {
+  // Video setup code...
+
+  FlixelTimer.wait(5f, t -> {
+    if (!cutscene.isReady()) {
+      finish(); // Nothing to show; move on.
+    }
+  });
+}
 
 @Override
 public void update(float elapsed) {
   super.update(elapsed);
-  if (!cutscene.isReady()) {
-    waited += elapsed; // Seconds.
-    if (waited > 5f) {
-      finish(); // Nothing to show; move on.
-      return;
-    }
-  }
   if (Flixel.keys.anyJustPressed(FlixelKey.ENTER, FlixelKey.ESCAPE)
       || Flixel.mouse.justPressed(FlixelMouseButton.LEFT)) {
     finish();
